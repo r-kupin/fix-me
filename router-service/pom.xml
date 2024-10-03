@@ -1,5 +1,8 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-    <modelVersion/>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>com.rokupin</groupId>
         <artifactId>fix-me</artifactId>
@@ -11,12 +14,6 @@
 
     <dependencies>
         <!-- Router-specific dependencies -->
-
-        <!-- Spring Boot WebFlux for non-blocking support -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
-        </dependency>
 
         <!-- Netty (Reactor Netty already in parent) -->
         <!-- Additional dependencies can be added here -->
