@@ -25,6 +25,11 @@ public class WebSocketConfig {
     }
 
     @Bean
+    WebSocketHandlerAdapter webSocketHandlerAdapter() {
+        return new WebSocketHandlerAdapter();
+    }
+
+    @Bean
     HandlerMapping handlerMapping() {
         Map<String, WebSocketHandler> handlers = new HashMap<>();
         handlers.put("/ws/requests", tradingWebSocketHandler);
@@ -34,12 +39,5 @@ public class WebSocketConfig {
                 setOrder(10);
             }
         };
-    }
-
-    // bridges the websocket support in Spring WebFlux with Spring WebFlux’s
-    // general routing machinery <4>
-    @Bean
-    WebSocketHandlerAdapter webSocketHandlerAdapter() {
-        return new WebSocketHandlerAdapter();
     }
 }

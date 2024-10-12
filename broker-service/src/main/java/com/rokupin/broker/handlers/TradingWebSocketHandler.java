@@ -12,15 +12,18 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Component
 public class TradingWebSocketHandler implements WebSocketHandler {
 
-    //    private final FixTradingService fixTradingService;
-//    private final Map<String, WebSocketSession> activeClients = new ConcurrentHashMap<>();
+    private final FixTradingService fixTradingService;
+    private final Map<String, WebSocketSession> activeClients = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
     public TradingWebSocketHandler(FixTradingService fixTradingService, ObjectMapper objectMapper) {
-//        this.fixTradingService = fixTradingService;
+        this.fixTradingService = fixTradingService;
         this.objectMapper = objectMapper;
     }
 
@@ -28,18 +31,17 @@ public class TradingWebSocketHandler implements WebSocketHandler {
     public Mono<Void> handle(WebSocketSession session) {
         Flux<WebSocketMessage> output = session.receive()
                 .map(WebSocketMessage::getPayloadAsText)
-                .map(message -> {
-                    String response_msg;
+                .flatMap(message -> {
+                    Mono<String> response_msg;
                     try {
-                        response_msg = objectMapper
-                                .readValue(message, TradeRequest.class)
-                                .asFix();
+                        response_msg = fixTradingService.sendFixMessage(
+                                objectMapper.readValue(message, TradeRequest.class));
                     } catch (JsonMappingException e) {
-                        response_msg = "can't map";
+                        response_msg = Mono.just("can't map");
                     } catch (JsonProcessingException e) {
-                        response_msg = "invalid json";
+                        response_msg = Mono.just("invalid json");
                     }
-                    return session.textMessage(response_msg);
+                    return response_msg.map(session::textMessage);
                 });
         return session.send(output);
     }

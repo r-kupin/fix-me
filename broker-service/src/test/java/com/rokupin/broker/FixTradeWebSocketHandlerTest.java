@@ -1,6 +1,5 @@
 package com.rokupin.broker;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.model.TradeRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,33 +10,46 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
 import org.springframework.web.reactive.socket.client.WebSocketClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.tcp.TcpServer;
 import reactor.test.StepVerifier;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class FixTradeWebSocketHandlerTest {
 
-    private int port = 8081;
+    private final int port = 8081;
 
     @Autowired
     private ObjectMapper objectMapper;
 
     private WebSocketClient webSocketClient;
+    private TcpServer server;
 
     @BeforeEach
     public void setup() {
         objectMapper = new ObjectMapper();
         webSocketClient = new ReactorNettyWebSocketClient();
+        server = TcpServer.create().host("localhost").port(5000);
     }
 
     @Test
     public void testSuccessfulTradeRequest() throws Exception {
         // Create JSON representing the trade request
-        TradeRequest request = new TradeRequest("BROKER1","AAPL","buy",100,567);
+        TradeRequest request = new TradeRequest("BROKER1", "AAPL", "buy", 100, 567);
         String jsonRequest = objectMapper.writeValueAsString(request);
         System.out.println("Parsed output to json:" + jsonRequest);
         URI uri = URI.create("ws://localhost:" + port + "/ws/requests");
+
+        server.handle((nettyInbound, nettyOutbound) ->
+                        nettyInbound.receive()
+                                .asString(StandardCharsets.UTF_8)
+                                .doOnNext(payload -> {
+                                    assert (request.equals(TradeRequest.fromFix(payload)));
+                                })
+                                .then())
+                .bind().subscribe();
 
         Mono<Void> clientExecution = webSocketClient.execute(
                 uri, session -> {
@@ -46,17 +58,7 @@ public class FixTradeWebSocketHandlerTest {
                     Mono<Void> receiveAndClose = session.receive()
                             .map(WebSocketMessage::getPayloadAsText)
                             .next()
-                            .doOnNext(payload -> {
-                                System.out.println("Received message: " + payload);
-                                TradeRequest received = TradeRequest.fromFix(payload);
-                                try {
-                                    System.out.println("Parsed input to json:"
-                                            + objectMapper.writeValueAsString(received));
-                                } catch (JsonProcessingException e) {
-                                    throw new RuntimeException(e);
-                                }
-                                assert(request.equals(received));
-                            })
+                            .doOnNext(payload -> System.out.println("Received message: " + payload))
                             .then();
                     return session.send(message).then(receiveAndClose);
                 });
