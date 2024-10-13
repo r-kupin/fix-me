@@ -24,45 +24,54 @@ public class FixTradeWebSocketHandlerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private WebSocketClient webSocketClient;
-    private TcpServer server;
+    private WebSocketClient mockClient;
+    private TcpServer mockRouterServer;
 
     @BeforeEach
     public void setup() {
         objectMapper = new ObjectMapper();
-        webSocketClient = new ReactorNettyWebSocketClient();
-        server = TcpServer.create().host("localhost").port(5000);
+        mockClient = new ReactorNettyWebSocketClient();
+        mockRouterServer = TcpServer.create().host("localhost").port(5000);
     }
 
     @Test
-    public void testSuccessfulTradeRequest() throws Exception {
-        // Create JSON representing the trade request
+    public void clientJsonToRouterFIXTest() throws Exception {
+        // JSON request that client sends to BrockerService
         TradeRequest request = new TradeRequest("BROKER1", "AAPL", "buy", 100, 567);
         String jsonRequest = objectMapper.writeValueAsString(request);
-        System.out.println("Parsed output to json:" + jsonRequest);
+        // BrockerService URL
         URI uri = URI.create("ws://localhost:" + port + "/ws/requests");
 
-        server.handle((nettyInbound, nettyOutbound) ->
+        // Setup RouterService listening mock to verify transferred fix messages
+        mockRouterServer.handle((nettyInbound, nettyOutbound) ->
                         nettyInbound.receive()
                                 .asString(StandardCharsets.UTF_8)
                                 .doOnNext(payload -> {
+                                    System.out.println(
+                                            "Router received: '" + payload + "'");
                                     assert (request.equals(TradeRequest.fromFix(payload)));
                                 })
                                 .then())
                 .bind().subscribe();
 
-        Mono<Void> clientExecution = webSocketClient.execute(
+        // Setup client mock to send trading requests to BrokerService
+        Mono<Void> clientExecution = mockClient.execute(
                 uri, session -> {
                     Mono<WebSocketMessage> message = Mono.just(session.textMessage(jsonRequest));
 
                     Mono<Void> receiveAndClose = session.receive()
                             .map(WebSocketMessage::getPayloadAsText)
                             .next()
-                            .doOnNext(payload -> System.out.println("Received message: " + payload))
+                            .doOnNext(payload -> {
+                                System.out.println(
+                                        "Client received: '" + payload + "'");
+                                assert payload.equals("Success");
+                            })
                             .then();
                     return session.send(message).then(receiveAndClose);
                 });
 
+        // perform execution
         StepVerifier.create(clientExecution).expectComplete().verify();
     }
 }
