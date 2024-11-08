@@ -5,12 +5,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.List;
 import java.util.Map;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class ExchangeStateUpdateMessage implements Serializable {
-    private List<Map<String, Integer>> exchangeStates;
+public class StocksStateMessage implements Serializable {
+    private int stockId;
+    private Map<String, Integer> instrumentToAvailableQty;
 }

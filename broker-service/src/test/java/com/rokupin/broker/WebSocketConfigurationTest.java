@@ -29,7 +29,7 @@ class WebSocketConfigurationTest {
 
     // <4>
     private TradeRequest generateRandomRequest() {
-        return new TradeRequest("BROKER1", "AAPL", "buy", 100, 567);
+        return new TradeRequest("BROKER1", "0", 1, "ABCD", "buy", 1);
     }
 
     @Test

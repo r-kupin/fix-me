@@ -1,4 +1,4 @@
-package com.rokupin.broker.config;
+package com.rokupin.broker.events;
 
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
@@ -16,9 +16,9 @@ import java.util.function.Consumer;
  * 3. Let WebSocketMessage publisher drain it gradually
  */
 @Component
-class TradeRequestCreatedEventPublisher implements
-        ApplicationListener<TradeRequestCreatedEvent>, // <1>
-        Consumer<FluxSink<TradeRequestCreatedEvent>> { //<2>
+public class InputEventPublisher<E extends InputEvent> implements
+        ApplicationListener<E>, // <1>
+        Consumer<FluxSink<E>> { //<2>
 
     private final Executor executor;
 
@@ -28,19 +28,19 @@ class TradeRequestCreatedEventPublisher implements
      * offered to the queue. This means we can simply loop forever, waiting
      * for the next item to be added to the queue, and when it’s available
      * our code will return and we can publish the event on the
-     * FluxSink<ProfileCreatedEvent> sink pointer we’ve been given when the
+     * FluxSink<StockUpdateReceivedEvent> sink pointer we’ve been given when the
      * Flux is first created.
      */
-    private final BlockingQueue<TradeRequestCreatedEvent> queue =
+    private final BlockingQueue<E> queue =
             new LinkedBlockingQueue<>(); // <3>
 
-    TradeRequestCreatedEventPublisher(Executor executor) {
+    public InputEventPublisher(Executor executor) {
         this.executor = executor;
     }
 
     // will be called when any new events published when a new Profile is created <4>
     @Override
-    public void onApplicationEvent(TradeRequestCreatedEvent event) {
+    public void onApplicationEvent(E event) {
         this.queue.offer(event);
     }
 
@@ -53,11 +53,11 @@ class TradeRequestCreatedEventPublisher implements
      * configured java.util.concurrent.Executor instance.
      */
     @Override
-    public void accept(FluxSink<TradeRequestCreatedEvent> sink) {
+    public void accept(FluxSink<E> sink) {
         this.executor.execute(() -> {
             while (true)
                 try {
-                    TradeRequestCreatedEvent event = queue.take(); // <5>
+                    E event = queue.take(); // <5>
                     sink.next(event); // <6>
                 } catch (InterruptedException e) {
                     ReflectionUtils.rethrowRuntimeException(e);

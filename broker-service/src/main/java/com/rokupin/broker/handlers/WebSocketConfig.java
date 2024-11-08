@@ -1,6 +1,5 @@
-package com.rokupin.broker.config;
+package com.rokupin.broker.handlers;
 
-import com.rokupin.broker.handlers.TradingWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
