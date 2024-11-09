@@ -76,7 +76,7 @@ class WebSocketConfigurationTest {
                 this.webClient
                         .post()
                         .uri("http://localhost:8080/profiles")
-                        .body(BodyInserters.fromObject(p))
+                        .body(BodyInserters.fromValue(p))
                         .retrieve()
                         .bodyToMono(String.class)
                         .thenReturn(p);

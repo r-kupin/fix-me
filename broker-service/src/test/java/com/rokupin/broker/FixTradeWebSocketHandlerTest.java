@@ -22,6 +22,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -71,9 +72,9 @@ public class FixTradeWebSocketHandlerTest {
 
             Mono<Void> receiveAndClose = session.receive()
                     .map(WebSocketMessage::getPayloadAsText)
-                    .doOnNext(payload -> {
-                        System.out.println("Client received: '" + payload + "'");
-                    }).take(2).then();
+                    .doOnNext(payload -> System.out.println("Client received: '" + payload + "'"))
+                    .take(2)
+                    .then();
             return session.send(message).then(receiveAndClose);
         });
         // perform execution
@@ -89,20 +90,6 @@ public class FixTradeWebSocketHandlerTest {
         // initial state to send on connection (1 stock with 2 instruments)
         map.put("TEST1", 1);
         map.put("TEST2", 2);
-
-//        // on Connection - introduce broker service to initial state
-//        mockRouterServer.doOnConnection(connection -> {
-//            try {
-//                String initialState = objectMapper
-//                        .writeValueAsString(new StocksStateMessage(1, map));
-//                System.out.println("External API mock: sent: '" +
-//                        initialState + "'");
-//                connection.outbound()
-//                        .sendString(Mono.just(initialState));
-//            } catch (JsonProcessingException e) {
-//                assert false;
-//            }
-//        });
 
         // on Message - update state, then post current to broker service
         mockRouterServer.handle((nettyInbound, nettyOutbound) -> nettyInbound
@@ -153,22 +140,17 @@ public class FixTradeWebSocketHandlerTest {
     }
 
     private Mono<Void> sendRequestWaitForStockStateUpdate(WebSocketSession session, int clientMockId) {
-
-        final boolean[] tradingRequestSent = {false};
+        final AtomicBoolean tradingRequestSent = new AtomicBoolean(false);
 
         return session.receive()
-//                .take(1) // wait only for current stocks
+                .take(7) // wait only for current stocks
                 .map(WebSocketMessage::getPayloadAsText)
                 .doOnNext(msg -> System.out.println("WS ClientMock" + clientMockId +
                         ": received : '" + msg + "'"))
                 .flatMap(msg -> {
                     try {
                         String requestJson = assembleTradingRequest(clientMockId, msg);
-                        if (!tradingRequestSent[0]) {
-                            tradingRequestSent[0] = true;
-                            return session.send(Mono.just(session.textMessage(requestJson)));
-                        }
-                        return Mono.empty();
+                        return session.send(Mono.just(session.textMessage(requestJson)));
                     } catch (JsonProcessingException e) {
                         try {
                             processTradingResponse(clientMockId, msg);

@@ -18,8 +18,6 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
 import java.util.EventObject;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 @Component
@@ -27,7 +25,7 @@ import java.util.function.Consumer;
 public class TradingWebSocketHandler implements WebSocketHandler {
 
     private final TradingService tradingService;
-    private final Map<String, WebSocketSession> activeClients;
+    //    private final Map<String, WebSocketSession> activeClients;
     private final ObjectMapper objectMapper;
     private final Flux<InputEvent<StocksStateMessage>> stockStateUpdateEventFlux;
     private final Flux<InputEvent<TradeResponse>> tradeResponseEventFlux;
@@ -40,13 +38,13 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         this.objectMapper = objectMapper;
         this.stockStateUpdateEventFlux = Flux.create(stockStateUpdateEventPublisher).share();
         this.tradeResponseEventFlux = Flux.create(tradeResponseEventPublisher).share();
-        this.activeClients = new ConcurrentHashMap<>();
+//        this.activeClients = new ConcurrentHashMap<>();
     }
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
         String sessionId = session.getId();
-        activeClients.putIfAbsent(sessionId, session);
+//        activeClients.putIfAbsent(sessionId, session);
 
         Mono<WebSocketMessage> onConnection = handleNewClient(session);
 
@@ -59,39 +57,14 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                                         .mergeWith(onStateUpdate)
                                         .mergeWith(onTradeResponse))
                         .doOnError(e -> log.error("Error in combined stream for session {}: {}", sessionId, e.getMessage()))
-                        .doOnTerminate(() -> log.info("Session {} terminated", sessionId)))
-                .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
+                        .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
+                        .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId)))
+                .doOnError(e -> log.error("Session {} encountered error: {}", sessionId, e.getMessage()))
                 .doFinally(signalType -> {
                     log.info("Session {} cleanup triggered with signal: {}", sessionId, signalType);
-                    activeClients.remove(sessionId);
+//                    activeClients.remove(sessionId);
                     closeSession(session);
                 });
-
-//        return session.send(onClientMessage
-//                        .mergeWith(onStateUpdate)
-//                        .mergeWith(onTradeResponse)
-//                        .doOnError(e -> log.error("Error in combined stream for session {}: {}", sessionId, e.getMessage()))
-//                        .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
-//                        .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId)))
-//                .doOnError(e -> log.error("Session {} encountered error: {}", sessionId, e.getMessage()))
-//                .doFinally(signal -> {
-//                    log.info("Session {} finalized with signal: {}", sessionId, signal);
-//                    activeClients.remove(sessionId);
-//                    try {
-//                        session.close().subscribe();
-//                    } catch (Exception closeException) {
-//                        log.warn("Exception while closing session {}: {}", sessionId, closeException.getMessage());
-//                    }
-//                });
-
-//        return session.send(Flux.concat(onConnection,
-//                                onClientMessage
-//                                        .mergeWith(onStateUpdate)
-//                                        .mergeWith(onTradeResponse)
-//                        )
-//                        .doOnError(e -> log.error("Error in combined stream: {}", e.getMessage()))
-//                        .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId)))
-//                .doFinally(signal -> activeClients.remove(sessionId));
     }
 
     private void closeSession(WebSocketSession session) {
@@ -121,7 +94,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                                         "response: '{}'", session.getId(), responseJson);
                                 return Mono.just(responseJson).map(session::textMessage);
                             } catch (JsonProcessingException e) {
-                                log.warn("WSHandler [{}]: event: '{}' can't be " +
+                                log.warn("WSHandler [{}]: trade response event: '{}' can't be " +
                                         "serialized to JSON", session.getId(), response);
                                 return Flux.empty();
                             }
@@ -150,7 +123,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                                     "state update: '{}'", session.getId(), stocksStateJson);
                             return Mono.just(stocksStateJson).map(session::textMessage);
                         } catch (JsonProcessingException e) {
-                            log.warn("WSHandler [{}]: event: '{}' can't be " +
+                            log.warn("WSHandler [{}]: state update event: '{}' can't be " +
                                     "serialized to JSON", session.getId(), stocksStateMessage);
                             return Flux.empty();
                         }
