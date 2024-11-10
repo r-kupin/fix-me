@@ -1,5 +1,6 @@
 package com.rokupin.broker;
-import com.rokupin.broker.model.TradeRequest;
+
+import com.rokupin.broker.model.trading_msg.TradeRequest;
 import lombok.extern.log4j.Log4j2;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class WebSocketConfigurationTest {
 
     // <4>
     private TradeRequest generateRandomRequest() {
-        return new TradeRequest("BROKER1", "0", 1, "ABCD", "buy", 1);
+        return new TradeRequest("BROKER1", "0", "1", "ABCD", "buy", 1);
     }
 
     @Test

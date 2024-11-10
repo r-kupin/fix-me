@@ -1,4 +1,4 @@
-package com.rokupin.broker.model;
+package com.rokupin.broker.model.trading_msg;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -22,7 +22,8 @@ public class TradeResponse extends TradeMessage {
     private static final int TAG_TARGET_SUB_ID = 57;
     private static final int TAG_EXEC_TYPE = 150;
     private static final int MSG_EXECUTION_REPORT = 8;
-    private int sender;      // SenderCompID (49)
+
+    private String sender;      // SenderCompID (49)
     private String target;         // TargetCompID (56)    >> assigned ID
     private String targetSubId;    // TargetSubID (57)     >> WS session ID
     private String instrument;  // Symbol (55)
@@ -32,7 +33,7 @@ public class TradeResponse extends TradeMessage {
 
     @Override
     protected void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException {
-        this.sender = Integer.parseInt(getRequiredField(fixFields, TAG_SOURCE_COMP_ID));
+        this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
         this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
         this.targetSubId = getRequiredField(fixFields, TAG_TARGET_SUB_ID);
         this.instrument = getRequiredField(fixFields, TAG_SYMBOL);

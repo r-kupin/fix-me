@@ -1,5 +1,6 @@
-package com.rokupin.broker.model;
+package com.rokupin.broker.model.trading_msg;
 
+import com.rokupin.broker.model.ClientTradingRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,16 +19,23 @@ public class TradeRequest extends TradeMessage {
 
     private String sender;      // SenderCompID (49)
     private String senderSubId; // SenderSubId (50)
-    private int target;         // TargetCompID (56)
+    private String target;         // TargetCompID (56)
     private String instrument;  // Symbol (55)
     private String action;      // Side (54) - 1 = Buy, 2 = Sell
     private int amount;         // OrderQty (38)
+
+    public TradeRequest(ClientTradingRequest clientMsg) {
+        this.target = clientMsg.getTarget();
+        this.instrument = clientMsg.getInstrument();
+        this.action = clientMsg.getAction();
+        this.amount = clientMsg.getAmount();
+    }
 
     @Override
     protected void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException {
         this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
         this.senderSubId = fixFields.get(TAG_SOURCE_SUB_ID);
-        this.target = Integer.parseInt(getRequiredField(fixFields, TAG_TARGET_COMP_ID));
+        this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
         this.instrument = getRequiredField(fixFields, TAG_SYMBOL);
         this.action = fixFields.get(TAG_SIDE);
         this.amount = Integer.parseInt(getRequiredField(fixFields, TAG_ORDER_QTY));

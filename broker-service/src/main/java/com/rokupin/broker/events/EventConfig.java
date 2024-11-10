@@ -1,7 +1,7 @@
 package com.rokupin.broker.events;
 
-import com.rokupin.broker.model.StocksStateMessage;
-import com.rokupin.broker.model.TradeResponse;
+import com.rokupin.broker.model.stocks_state.StocksStateMessage;
+import com.rokupin.broker.model.trading_msg.TradeResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -4,9 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.InputEvent;
-import com.rokupin.broker.model.StocksStateMessage;
-import com.rokupin.broker.model.TradeRequest;
-import com.rokupin.broker.model.TradeResponse;
+import com.rokupin.broker.model.ClientTradingRequest;
+import com.rokupin.broker.model.stocks_state.StocksStateMessage;
+import com.rokupin.broker.model.trading_msg.TradeRequest;
+import com.rokupin.broker.model.trading_msg.TradeResponse;
 import com.rokupin.broker.service.TradingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.util.EventObject;
 import java.util.function.Consumer;
@@ -52,26 +54,33 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         Flux<WebSocketMessage> onTradeResponse = handleTradeResponseEvent(session);
         Flux<WebSocketMessage> onClientMessage = handleClientInput(session);
 
-        return session.send(Flux.concat(onConnection,
-                                onClientMessage
-                                        .mergeWith(onStateUpdate)
-                                        .mergeWith(onTradeResponse))
-                        .doOnError(e -> log.error("Error in combined stream for session {}: {}", sessionId, e.getMessage()))
-                        .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
-                        .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId)))
+        return session.send(combineOutputs(onConnection, onClientMessage, onStateUpdate, onTradeResponse, sessionId))
                 .doOnError(e -> log.error("Session {} encountered error: {}", sessionId, e.getMessage()))
-                .doFinally(signalType -> {
-                    log.info("Session {} cleanup triggered with signal: {}", sessionId, signalType);
-//                    activeClients.remove(sessionId);
-                    closeSession(session);
-                });
+                .doFinally(handleSessionShutwown(session));
     }
 
-    private void closeSession(WebSocketSession session) {
-        session.close()
-                .doOnSuccess(aVoid -> log.info("Session {} closed successfully", session.getId()))
-                .doOnError(e -> log.error("Failed to close session {}: {}", session.getId(), e.getMessage()))
-                .subscribe();
+    private Flux<WebSocketMessage> combineOutputs(Mono<WebSocketMessage> onConnection,
+                                                  Flux<WebSocketMessage> onClientMessage,
+                                                  Flux<WebSocketMessage> onStateUpdate,
+                                                  Flux<WebSocketMessage> onTradeResponse,
+                                                  String sessionId) {
+        return Flux.concat(onConnection, onClientMessage
+                        .mergeWith(onStateUpdate)
+                        .mergeWith(onTradeResponse))
+                .doOnError(e -> log.error("Error in combined stream for session {}: {}", sessionId, e.getMessage()))
+                .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
+                .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId));
+    }
+
+    private Consumer<SignalType> handleSessionShutwown(WebSocketSession session) {
+        return signalType -> {
+            log.info("Session {} cleanup triggered with signal: {}", session.getId(), signalType);
+//                    activeClients.remove(sessionId);
+            session.close()
+                    .doOnSuccess(aVoid -> log.info("Session {} closed successfully", session.getId()))
+                    .doOnError(e -> log.error("Failed to close session {}: {}", session.getId(), e.getMessage()))
+                    .subscribe();
+        };
     }
 
     private Mono<WebSocketMessage> handleNewClient(WebSocketSession session) {
@@ -80,6 +89,11 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 .map(session::textMessage);
     }
 
+    //    class FuncImpl implements Function<Flux<String>, String> {
+//          public Flux<String> apply(String msg) {
+//
+//          }
+//    }
     private Flux<WebSocketMessage> handleTradeResponseEvent(WebSocketSession session) {
         return tradeResponseEventFlux
                 .map(EventObject::getSource)
@@ -143,7 +157,8 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                     log.info("WSHandler [{}]: processing request '{}'",
                             session.getId(), msg);
                     try {
-                        TradeRequest request = objectMapper.readValue(msg, TradeRequest.class);
+                        ClientTradingRequest clientMsg = objectMapper.readValue(msg, ClientTradingRequest.class);
+                        TradeRequest request = new TradeRequest(clientMsg);
                         request.setSenderSubId(session.getId());
                         response_msg = tradingService.handleTradingRequest(request);
                     } catch (JsonMappingException e) {

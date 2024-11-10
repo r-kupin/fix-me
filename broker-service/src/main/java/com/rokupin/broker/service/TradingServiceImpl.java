@@ -1,12 +1,14 @@
 package com.rokupin.broker.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.InputEvent;
-import com.rokupin.broker.model.MissingRequiredTagException;
-import com.rokupin.broker.model.StocksStateMessage;
-import com.rokupin.broker.model.TradeRequest;
-import com.rokupin.broker.model.TradeResponse;
+import com.rokupin.broker.model.stocks_state.InitialStockStateMessage;
+import com.rokupin.broker.model.stocks_state.StocksStateMessage;
+import com.rokupin.broker.model.trading_msg.MissingRequiredTagException;
+import com.rokupin.broker.model.trading_msg.TradeRequest;
+import com.rokupin.broker.model.trading_msg.TradeResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -16,28 +18,32 @@ import reactor.netty.Connection;
 import reactor.netty.tcp.TcpClient;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
 public class TradingServiceImpl implements TradingService {
+    private final ObjectMapper objectMapper;
+
     private final Mono<Connection> connection;
     private final ApplicationEventPublisher publisher;
-    private final ObjectMapper objectMapper;
     private final Sinks.Many<String> initialStateSink;
     private final AtomicBoolean updateRequested;
 
-    private final List<Map<String, Integer>> currentStockState;
+    // StockId : {Instrument : AmountAvailable}
+    private final Map<String, Map<String, Integer>> currentStockState;
+
+    private String assignedId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
                               ObjectMapper objectMapper) {
         this.publisher = publisher;
         this.objectMapper = objectMapper;
-        this.currentStockState = new ArrayList<>();
+        this.currentStockState = new ConcurrentHashMap<>();
         this.updateRequested = new AtomicBoolean(false);
         this.initialStateSink = Sinks.many().replay().all();
 
@@ -58,6 +64,10 @@ public class TradingServiceImpl implements TradingService {
     @Override
     public Mono<String> handleTradingRequest(TradeRequest tradeRequest) {
         try {
+            if (assignedId.isEmpty())
+                return Mono.just("Trading request not sent:" +
+                        " this broker service has no assigned ID");
+            tradeRequest.setSender(assignedId);
             String fix = tradeRequest.asFix();
             log.info("TCPService: sending message '{}'", fix);
             return connection.flatMap(con -> con.outbound()
@@ -76,20 +86,22 @@ public class TradingServiceImpl implements TradingService {
         if (!currentStockState.isEmpty()) {
             return Mono.just(serializeCurrentState());
         }
+
+        // Stock state cache is empty
         if (updateRequested.compareAndSet(false, true)) {
-            connection.flatMap(conn ->
-                    conn.outbound()
-                            .sendString(Mono.just("STATE_UPD"), StandardCharsets.UTF_8)
-                            .then()
+            // Ask for initialisation
+            connection.flatMap(conn -> conn.outbound()
+                    .sendString(Mono.just("STATE_UPD"), StandardCharsets.UTF_8)
+                    .then()
             ).subscribe();
         }
-
+        // Listen to the flux, states will be published upon router's answer
         return initialStateSink.asFlux().next();
     }
 
     private String serializeCurrentState() {
         try {
-            return objectMapper.writeValueAsString(new StocksStateMessage(1, currentStockState.get(1)));
+            return objectMapper.writeValueAsString(currentStockState);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize currentStockState");
         }
@@ -98,47 +110,64 @@ public class TradingServiceImpl implements TradingService {
     private void handleIncomingMessage(String message) {
         log.info("TCPService: received message: '{}'", message);
         try { // received state update
-            updateState(objectMapper.readValue(message, StocksStateMessage.class));
+            updateStateInitial(message);
         } catch (JsonProcessingException e) {
             try { // received trading response
-                TradeResponse response = TradeResponse.fromFix(message, new TradeResponse());
-                updateState(response);
+                updateState(TradeResponse.fromFix(message, new TradeResponse()));
             } catch (MissingRequiredTagException ex) {
-                log.warn("TCP client received message that isn't a valid ExchangeStateUpdateMessage");
+                try {
+                    updateStateFollowing(message);
+                } catch (JsonProcessingException exception) {
+                    log.warn("TCP client received invalid message");
+                }
             }
         }
     }
 
-    private void updateState(StocksStateMessage state) {
-        int id = state.getStockId();
-        boolean isInitialUpdate = currentStockState.isEmpty();
-
-        while (currentStockState.size() <= id)
-            currentStockState.add(null);
-
-        if (currentStockState.get(id) != null) {
-            currentStockState.set(id, state.getInstrumentToAvailableQty());
+    private void updateState(String stockId, Map<String, Integer> stockState) {
+        if (currentStockState.containsKey(stockId)) {
+            currentStockState.replace(stockId, stockState);
         } else {
-            currentStockState.set(id, new HashMap<>(state.getInstrumentToAvailableQty()));
+            currentStockState.put(stockId, new HashMap<>(stockState));
         }
+    }
 
-        if (isInitialUpdate) {
-            log.info("Emitting updated state: initial update");
-            initialStateSink.tryEmitNext(serializeCurrentState()); // Unblock waiting clients
+    private void updateStateInitial(String message) throws JsonProcessingException {
+        InitialStockStateMessage initialMessage =
+                objectMapper.readValue(message, InitialStockStateMessage.class);
+        if (Objects.isNull(assignedId)) {
+            initialMessage.getStocks().forEach(this::updateState);
+            assignedId = initialMessage.getAssignedId();
+            initialStateSink.tryEmitNext(serializeCurrentState());
+            log.info("TCPService: stock state updated from initial update. " +
+                    "Emitting update to the flux.");
         } else {
-            log.info("Publishing updated state: real update");
-            publisher.publishEvent(new InputEvent<>(state)); // Only publish real updates
+            log.warn("TCPService: repeatable init messages received.");
         }
+    }
+
+    private void updateStateFollowing(String message) throws JsonProcessingException {
+        Map<String, Map<String, Integer>> state =
+                objectMapper.readValue(message, new TypeReference<>() {
+                });
+        state.forEach((stockId, stockState) -> {
+            updateState(stockId, stockState);
+            publisher.publishEvent(
+                    new InputEvent<>(
+                            new StocksStateMessage(Map.of(stockId, stockState))));
+        });
+        log.info("TCPService: stock state updated from router-sent state update. " +
+                "Publishing update event.");
     }
 
     private void updateState(TradeResponse response) {
-        if (response.getOrdStatus() == TradeResponse.MSG_ORD_FILLED) {
-            int id = response.getSender();
-            if (currentStockState.size() <= id) {
-                log.warn("Response from unknown stock id: {}", id);
-                return;
-            }
+        String id = response.getSender();
 
+        if (!currentStockState.containsKey(id)) {
+            log.warn("Response from unknown stock id: {}", id);
+            return;
+        }
+        if (response.getOrdStatus() == TradeResponse.MSG_ORD_FILLED) {
             Map<String, Integer> stock = currentStockState.get(id);
             String instrument = response.getInstrument();
             if (!stock.containsKey(instrument)) {
@@ -159,9 +188,11 @@ public class TradingServiceImpl implements TradingService {
             stock.replace(instrument, after);
             publisher.publishEvent(
                     new InputEvent<>(
-                            new StocksStateMessage(id, currentStockState.get(id))));
-            publisher.publishEvent(new InputEvent<>(response));
+                            new StocksStateMessage(
+                                    Map.of(id, currentStockState.get(id)))));
+
             log.info("TCPService: published 2 events");
         }
+        publisher.publishEvent(new InputEvent<>(response));
     }
 }

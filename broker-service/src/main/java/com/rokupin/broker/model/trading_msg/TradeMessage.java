@@ -1,4 +1,4 @@
-package com.rokupin.broker.model;
+package com.rokupin.broker.model.trading_msg;
 
 
 import java.io.Serializable;
