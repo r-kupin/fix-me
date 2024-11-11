@@ -1,6 +1,6 @@
 package com.rokupin.broker;
 
-import com.rokupin.broker.model.trading_msg.TradeRequest;
+import com.rokupin.model.fix.TradeRequest;
 import lombok.extern.log4j.Log4j2;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;

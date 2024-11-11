@@ -13,6 +13,7 @@
         <module>router-service</module>
         <module>exchange-service</module>
         <module>client-service</module>
+        <module>core</module>
     </modules>
 
     <!-- Shared properties -->
@@ -55,7 +56,6 @@
             <version>1.18.30</version>
             <optional>true</optional>
         </dependency>
-
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>

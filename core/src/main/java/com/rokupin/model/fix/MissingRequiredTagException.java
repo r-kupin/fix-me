@@ -1,4 +1,4 @@
-package com.rokupin.broker.model.trading_msg;
+package com.rokupin.model.fix;
 
 public class MissingRequiredTagException extends Exception {
     public MissingRequiredTagException(String s) {

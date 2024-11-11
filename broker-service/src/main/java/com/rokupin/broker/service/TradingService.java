@@ -1,6 +1,6 @@
 package com.rokupin.broker.service;
 
-import com.rokupin.broker.model.trading_msg.TradeRequest;
+import com.rokupin.model.fix.TradeRequest;
 import reactor.core.publisher.Mono;
 
 public interface TradingService {

@@ -1,6 +1,5 @@
-package com.rokupin.broker.model.trading_msg;
+package com.rokupin.model.fix;
 
-import com.rokupin.broker.model.ClientTradingRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;

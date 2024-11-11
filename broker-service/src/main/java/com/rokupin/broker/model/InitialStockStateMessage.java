@@ -1,4 +1,4 @@
-package com.rokupin.broker.model.stocks_state;
+package com.rokupin.broker.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -10,6 +10,8 @@ import java.util.Map;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class StocksStateMessage implements Serializable {
+public class InitialStockStateMessage implements Serializable {
+    private String assignedId;
+    // StockId : {Instrument : AmountAvailable}
     private Map<String, Map<String, Integer>> stocks;
 }
