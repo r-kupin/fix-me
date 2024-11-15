@@ -10,6 +10,7 @@ import com.rokupin.model.fix.MissingRequiredTagException;
 import com.rokupin.model.fix.TradeRequest;
 import com.rokupin.model.fix.TradeResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -40,7 +41,9 @@ public class TradingServiceImpl implements TradingService {
     private String assignedId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              @Value("${tcp.host}") String host,
+                              @Value("${tcp.port}") int port) {
         this.publisher = publisher;
         this.objectMapper = objectMapper;
         this.currentStockState = new ConcurrentHashMap<>();
@@ -48,8 +51,8 @@ public class TradingServiceImpl implements TradingService {
         this.initialStateSink = Sinks.many().replay().all();
 
         connection = TcpClient.create()
-                .host("localhost")
-                .port(5000)
+                .host(host)
+                .port(port)
                 .handle((inbound, outbound) ->
                         // handle the incoming data (responses / updates from router)
                         inbound.receive()
@@ -160,6 +163,7 @@ public class TradingServiceImpl implements TradingService {
                 "Publishing update event.");
     }
 
+    // todo: Might not publish response if went wrong
     private void updateState(TradeResponse response) {
         String id = response.getSender();
 

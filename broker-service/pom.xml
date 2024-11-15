@@ -13,20 +13,19 @@
     <artifactId>broker-service</artifactId>
 
     <dependencies>
-        <!-- Broker-specific dependencies -->
-
-
-        <!-- Netty (Reactor Netty already in parent) -->
-        <!-- Additional dependencies can be added here -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
+        <!-- Core -->
         <dependency>
             <groupId>com.rokupin</groupId>
             <artifactId>core</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!-- WebSocket -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
