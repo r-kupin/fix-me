@@ -1,91 +1,76 @@
 package com.rokupin.exchange;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.exchange.model.IdAssignationMessage;
-import com.rokupin.exchange.repo.StockRepo;
-import com.rokupin.model.fix.TradeRequest;
+import com.rokupin.model.fix.FixIdAssignation;
+import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.MissingRequiredTagException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.MariaDBContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.DisposableServer;
 import reactor.netty.tcp.TcpServer;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class FixTradeExchangeCommunicationTest {
-    @Container
-    static MariaDBContainer<?> mariaDB = new MariaDBContainer<>("mariadb:latest")
-            .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("testcontainers/create-schema.sql"),
-                    "/docker-entrypoint-initdb.d/init.sql");
-    @Autowired
-    StockRepo repo;
-
-    @Autowired
-    private ObjectMapper objectMapper;
     private TcpServer mockRouterServer;
-
-    @DynamicPropertySource
-    static void registerDynamicProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.r2dbc.url",
-                () -> "r2dbc:mariadb://" + mariaDB.getHost() + ":" +
-                        mariaDB.getFirstMappedPort() + "/" +
-                        mariaDB.getDatabaseName());
-        registry.add("spring.r2dbc.username", () -> mariaDB.getUsername());
-        registry.add("spring.r2dbc.password", () -> mariaDB.getPassword());
-    }
 
     @BeforeEach
     public void setup() {
-        objectMapper = new ObjectMapper();
         mockRouterServer = TcpServer.create().host("localhost").port(5001);
     }
 
     @Test
     public void connectionTest() {
-        mockRouterServer.handle((nettyInbound, nettyOutbound) -> {
-            nettyOutbound.sendString(Mono.just(makeRequest()))
-                    .then(nettyOutbound.sendString(Mono.just(makeTradingRequest())))
-                    .then()
-                    .subscribe();
+        CountDownLatch latch = new CountDownLatch(1);
 
-            return nettyInbound.receive()
-                    .asString(StandardCharsets.UTF_8)
-                    .doOnNext(payload -> System.out.println(
-                            "External API mock: received '" + payload + "'")
-                    ).then();
-        }).bind().subscribe();
+        DisposableServer server = mockRouterServer.doOnConnection(connection -> connection.outbound()
+                .sendString(Mono.just(makeIdAssignationMsg()), StandardCharsets.UTF_8)
+                .then()
+                .thenMany(connection.outbound().sendString(Mono.just(makeRequest()), StandardCharsets.UTF_8).then())
+                .subscribe()
+        ).handle((inbound, outbound) -> inbound.receive()
+                .asString(StandardCharsets.UTF_8)
+                .flatMap(payload -> {
+                    System.out.println("External API mock: received '" + payload + "'");
+                    return Flux.empty();
+                })
+                .then()
+        ).bindNow();
+
+        try {
+            // Wait for a message to be processed, or timeout after 10 minutes.
+            if (!latch.await(10, TimeUnit.MINUTES)) {
+                System.err.println("Test timed out waiting for server to process requests");
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            // Ensure the server is stopped after the test.
+            server.disposeNow();
+        }
     }
 
     private String makeRequest() {
         try {
-            return objectMapper.writeValueAsString(new TradeRequest(
-                    "000000",
+            return new FixRequest(
+                    "B00000",
                     "1",
-                    "000000",
+                    "E00000",
                     "TEST1",
-                    "buy",
-                    1));
-        } catch (JsonProcessingException e) {
-            assert false;
-            return null;
+                    "1",
+                    1).asFix();
+        } catch (MissingRequiredTagException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private String makeTradingRequest() {
+    private String makeIdAssignationMsg() {
         try {
-            return objectMapper.writeValueAsString(
-                    new IdAssignationMessage("000001"));
-        } catch (JsonProcessingException e) {
+            return new FixIdAssignation("R00000", "E00000").asFix();
+        } catch (MissingRequiredTagException e) {
             assert false;
             return null;
         }

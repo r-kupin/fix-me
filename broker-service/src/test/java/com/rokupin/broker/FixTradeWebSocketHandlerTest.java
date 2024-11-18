@@ -6,9 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.model.InitialStockStateMessage;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.ClientTradingRequest;
+import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.FixResponse;
 import com.rokupin.model.fix.MissingRequiredTagException;
-import com.rokupin.model.fix.TradeRequest;
-import com.rokupin.model.fix.TradeResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,43 +46,6 @@ public class FixTradeWebSocketHandlerTest {
         brockerServiceWsUri = URI.create("ws://localhost:" + port + "/ws/requests");
     }
 
-//    @Test
-//    public void clientJsonToRouterFIXTest() throws Exception {
-//        // JSON request that client sends to BrokerService
-//        TradeRequest request = new TradeRequest("BROKER1", "0", 1, "ABCD",
-//                "buy", 1);
-//        String jsonRequest = objectMapper.writeValueAsString(request);
-//
-//        // Setup RouterService listening mock to verify transferred fix messages
-//        mockRouterServer.handle((nettyInbound, nettyOutbound) -> nettyInbound.receive()
-//                        .asString(StandardCharsets.UTF_8)
-//                        .doOnNext(payload -> {
-//                            System.out.println("Router received: '" + payload + "'");
-//                            try {
-//                                TradeRequest parsed = TradeRequest.fromFix(payload, new TradeRequest());
-//                                assert request.equals(parsed);
-//                            } catch (MissingRequiredTagException e) {
-//                                assert false;
-//                            }
-//                        }).then())
-//                .bind()
-//                .subscribe();
-//
-//        // Setup client mock to send trading requests to BrokerService
-//        Mono<Void> clientExecution = mockClient.execute(brockerServiceWsUri, session -> {
-//            Mono<WebSocketMessage> message = Mono.just(session.textMessage(jsonRequest));
-//
-//            Mono<Void> receiveAndClose = session.receive()
-//                    .map(WebSocketMessage::getPayloadAsText)
-//                    .doOnNext(payload -> System.out.println("Client received: '" + payload + "'"))
-//                    .take(2)
-//                    .then();
-//            return session.send(message).then(receiveAndClose);
-//        });
-//        // perform execution
-//        StepVerifier.create(clientExecution).expectComplete().verify();
-//    }
-
     public Map<String, Map<String, Integer>> initStocksMock() {
         Map<String, Integer> stock1 = new HashMap<>();
         stock1.put("TEST1", 1);
@@ -110,8 +73,8 @@ public class FixTradeWebSocketHandlerTest {
                                 " API mock: received '" + payload + "'"))
                         .map(payload -> {
                             try {
-                                TradeRequest fixRequest = TradeRequest.fromFix(payload, new TradeRequest());
-                                TradeResponse upd = updateMockStock(stocks, fixRequest);
+                                FixRequest fixRequest = FixRequest.fromFix(payload, new FixRequest());
+                                FixResponse upd = updateMockStock(stocks, fixRequest);
                                 return upd.asFix();
                             } catch (MissingRequiredTagException e) {
                                 if (payload.equals("STATE_UPD")) {
@@ -184,7 +147,7 @@ public class FixTradeWebSocketHandlerTest {
     }
 
     private void processTradingResponse(int clientMockId, String response) throws JsonProcessingException {
-        TradeResponse responseJson = objectMapper.readValue(response, TradeResponse.class);
+        FixResponse responseJson = objectMapper.readValue(response, FixResponse.class);
         System.out.println("WS ClientMock" + clientMockId +
                 ": received trading response: '" + responseJson + "'");
     }
@@ -210,7 +173,7 @@ public class FixTradeWebSocketHandlerTest {
         return requestJson;
     }
 
-    private TradeResponse updateMockStock(Map<String, Map<String, Integer>> stocks, TradeRequest request) {
+    private FixResponse updateMockStock(Map<String, Map<String, Integer>> stocks, FixRequest request) {
         lock.writeLock().lock();
         try {
             String instrument = request.getInstrument();
@@ -218,14 +181,14 @@ public class FixTradeWebSocketHandlerTest {
             int before = stocks.get(request.getTarget()).get(instrument);
             int after = request.getAction().equals("buy") ?
                     before - request.getAmount() : before + request.getAmount();
-            TradeResponse response = new TradeResponse(
+            FixResponse response = new FixResponse(
                     request.getTarget(),
                     request.getSender(),
                     request.getSenderSubId(),
                     request.getInstrument(),
                     request.getAction(),
                     request.getAmount(),
-                    TradeResponse.MSG_ORD_REJECTED
+                    FixResponse.MSG_ORD_REJECTED
             );
             System.out.println("Instrument:'" + instrument + "', " +
                     "amount after: " + after + " state before '" + stocks + "'");
@@ -234,7 +197,7 @@ public class FixTradeWebSocketHandlerTest {
                 return response;
             }
             System.out.println("transaction succeed");
-            response.setOrdStatus(TradeResponse.MSG_ORD_FILLED);
+            response.setOrdStatus(FixResponse.MSG_ORD_FILLED);
             stocks.get(request.getTarget()).replace(request.getInstrument(), after);
             return response;
         } catch (Exception e) {

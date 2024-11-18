@@ -7,8 +7,8 @@ import com.rokupin.broker.events.InputEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.broker.service.TradingService;
 import com.rokupin.model.fix.ClientTradingRequest;
-import com.rokupin.model.fix.TradeRequest;
-import com.rokupin.model.fix.TradeResponse;
+import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.FixResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -30,12 +30,12 @@ public class TradingWebSocketHandler implements WebSocketHandler {
     //    private final Map<String, WebSocketSession> activeClients;
     private final ObjectMapper objectMapper;
     private final Flux<InputEvent<StocksStateMessage>> stockStateUpdateEventFlux;
-    private final Flux<InputEvent<TradeResponse>> tradeResponseEventFlux;
+    private final Flux<InputEvent<FixResponse>> tradeResponseEventFlux;
 
     public TradingWebSocketHandler(TradingService tradingService,
                                    ObjectMapper objectMapper,
                                    Consumer<FluxSink<InputEvent<StocksStateMessage>>> stockStateUpdateEventPublisher,
-                                   Consumer<FluxSink<InputEvent<TradeResponse>>> tradeResponseEventPublisher) {
+                                   Consumer<FluxSink<InputEvent<FixResponse>>> tradeResponseEventPublisher) {
         this.tradingService = tradingService;
         this.objectMapper = objectMapper;
         this.stockStateUpdateEventFlux = Flux.create(stockStateUpdateEventPublisher).share();
@@ -98,7 +98,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         return tradeResponseEventFlux
                 .map(EventObject::getSource)
                 .flatMap(msg -> {
-                    if (msg instanceof TradeResponse response) {
+                    if (msg instanceof FixResponse response) {
                         if (response.getTargetSubId().equals(session.getId())) {
                             log.info("WSHandler [{}]: processing trading " +
                                     "response event '{}'", session.getId(), msg);
@@ -158,7 +158,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                             session.getId(), msg);
                     try {
                         ClientTradingRequest clientMsg = objectMapper.readValue(msg, ClientTradingRequest.class);
-                        TradeRequest request = new TradeRequest(clientMsg);
+                        FixRequest request = new FixRequest(clientMsg);
                         request.setSenderSubId(session.getId());
                         response_msg = tradingService.handleTradingRequest(request);
                     } catch (JsonMappingException e) {

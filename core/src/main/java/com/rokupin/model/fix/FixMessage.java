@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public abstract class TradeMessage implements Serializable {
+public abstract class FixMessage implements Serializable {
 
     protected static final int TAG_BEGIN_STRING = 8;
     protected static final int TAG_MSG_TYPE = 35;
@@ -19,7 +19,7 @@ public abstract class TradeMessage implements Serializable {
     protected static final int TAG_ORDER_QTY = 38;
     protected static final int TAG_TARGET_COMP_ID = 56;
 
-    public static <T extends TradeMessage> T fromFix(String fixMessage, T message) throws MissingRequiredTagException {
+    public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws MissingRequiredTagException {
         Map<Integer, String> fixFields = Arrays.stream(fixMessage.split("\u0001"))
                 .map(part -> part.split("=", 2))
                 .filter(pair -> pair.length == 2)
@@ -35,7 +35,9 @@ public abstract class TradeMessage implements Serializable {
     protected static String getRequiredField(Map<Integer, String> fields,
                                              int tag) throws MissingRequiredTagException {
         return Optional.ofNullable(fields.get(tag))
-                .orElseThrow(() -> new MissingRequiredTagException("Missing required tag: " + tag));
+                .orElseThrow(() ->
+                        new MissingRequiredTagException("Missing required tag: " + tag)
+                );
     }
 
     protected abstract void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException;

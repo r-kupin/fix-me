@@ -6,9 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.InputEvent;
 import com.rokupin.broker.model.InitialStockStateMessage;
 import com.rokupin.broker.model.StocksStateMessage;
+import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.FixResponse;
 import com.rokupin.model.fix.MissingRequiredTagException;
-import com.rokupin.model.fix.TradeRequest;
-import com.rokupin.model.fix.TradeResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
@@ -65,7 +65,7 @@ public class TradingServiceImpl implements TradingService {
     }
 
     @Override
-    public Mono<String> handleTradingRequest(TradeRequest tradeRequest) {
+    public Mono<String> handleTradingRequest(FixRequest tradeRequest) {
         try {
             if (assignedId.isEmpty())
                 return Mono.just("Trading request not sent:" +
@@ -116,7 +116,7 @@ public class TradingServiceImpl implements TradingService {
             updateStateInitial(message);
         } catch (JsonProcessingException e) {
             try { // received trading response
-                updateState(TradeResponse.fromFix(message, new TradeResponse()));
+                updateState(FixResponse.fromFix(message, new FixResponse()));
             } catch (MissingRequiredTagException ex) {
                 try {
                     updateStateFollowing(message);
@@ -164,14 +164,14 @@ public class TradingServiceImpl implements TradingService {
     }
 
     // todo: Might not publish response if went wrong
-    private void updateState(TradeResponse response) {
+    private void updateState(FixResponse response) {
         String id = response.getSender();
 
         if (!currentStockState.containsKey(id)) {
             log.warn("Response from unknown stock id: {}", id);
             return;
         }
-        if (response.getOrdStatus() == TradeResponse.MSG_ORD_FILLED) {
+        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
             Map<String, Integer> stock = currentStockState.get(id);
             String instrument = response.getInstrument();
             if (!stock.containsKey(instrument)) {

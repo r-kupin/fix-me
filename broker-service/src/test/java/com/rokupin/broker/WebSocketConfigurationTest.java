@@ -1,6 +1,6 @@
 package com.rokupin.broker;
 
-import com.rokupin.model.fix.TradeRequest;
+import com.rokupin.model.fix.FixRequest;
 import lombok.extern.log4j.Log4j2;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -29,8 +29,8 @@ class WebSocketConfigurationTest {
     private final WebClient webClient = WebClient.builder().build();
 
     // <4>
-    private TradeRequest generateRandomRequest() {
-        return new TradeRequest("BROKER1", "0", "1", "ABCD", "buy", 1);
+    private FixRequest generateRandomRequest() {
+        return new FixRequest("BROKER1", "0", "1", "ABCD", "buy", 1);
     }
 
     @Test
@@ -62,7 +62,7 @@ class WebSocketConfigurationTest {
 
         // <12>
         Flux
-                .<TradeRequest>generate(sink -> sink.next(generateRandomRequest()))
+                .<FixRequest>generate(sink -> sink.next(generateRandomRequest()))
                 .take(count)
                 .flatMap(this::write)
                 .blockLast();
@@ -72,7 +72,7 @@ class WebSocketConfigurationTest {
         Assertions.assertThat(counter.get()).isEqualTo(count); // <13>
     }
 
-    private Publisher<TradeRequest> write(TradeRequest p) {
+    private Publisher<FixRequest> write(FixRequest p) {
         return
                 this.webClient
                         .post()
