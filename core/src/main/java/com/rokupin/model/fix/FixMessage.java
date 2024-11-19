@@ -46,6 +46,8 @@ public abstract class FixMessage implements Serializable {
 
     public String asFix() throws MissingRequiredTagException {
         StringBuilder fixMessage = new StringBuilder();
+
+        appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
         appendFields(fixMessage);
 
         // Calculate checksum

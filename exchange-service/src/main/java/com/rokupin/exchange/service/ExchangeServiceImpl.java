@@ -1,8 +1,10 @@
 package com.rokupin.exchange.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.exchange.model.InstrumentEntry;
 import com.rokupin.exchange.repo.StockRepo;
+import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.FixIdAssignation;
 import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;
@@ -20,22 +22,23 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 @Transactional
 public class ExchangeServiceImpl {
     private final StockRepo stockRepo;
-    private final ObjectMapper objectMapper;
     private final Connection connection;
+    private final ObjectMapper objectMapper;
 
     private String assignedId;
 
     public ExchangeServiceImpl(StockRepo stockRepo, ObjectMapper objectMapper,
                                @Value("${tcp.host}") String host,
                                @Value("${tcp.port}") int port) {
-        this.stockRepo = stockRepo;
         this.objectMapper = objectMapper;
+        this.stockRepo = stockRepo;
         this.connection = connectTcpClient(host, port);
         this.assignedId = "";
     }
@@ -44,11 +47,10 @@ public class ExchangeServiceImpl {
         TcpClient client = TcpClient.create()
                 .host(host)
                 .port(port)
-                .handle((inbound, outbound) ->
-                        inbound.receive()
-                                .asString(StandardCharsets.UTF_8)
-                                .flatMap(this::handleIncomingData)
-                                .then());
+                .handle((inbound, outbound) -> inbound.receive()
+                        .asString(StandardCharsets.UTF_8)
+                        .flatMap(this::handleIncomingData)
+                        .then());
         client.warmup().block();
         return persistConnectionAttempts(client);
     }
@@ -89,44 +91,76 @@ public class ExchangeServiceImpl {
     private Mono<Void> handleIncomingMessage(String msg) {
         log.info("Exchange service: received message: '{}'", msg);
 
-        try {
+        try { // is it a trading request?
             FixRequest request = FixResponse.fromFix(msg, new FixRequest());
-            return processTradeRequest(request)
-                    .flatMap(response -> {
-                        try {
-                            return connection.outbound()
-                                    .sendString(Mono.just(response.asFix()),
-                                            StandardCharsets.UTF_8)
-                                    .then();
-                        } catch (MissingRequiredTagException e) {
-                            log.error("Exchange service: response assembly failed. This can't happen.");
-                            return Mono.empty();
-                        }
-                    })
-                    .doOnError(e -> log.error("Failed to process or respond to trade request: {}", e.getMessage()))
-                    .then();
+            if (!assignedId.isEmpty()) {
+                return sendResponse(request);
+            } else
+                log.warn("Exchange service: received trading request before ID was assigned");
         } catch (MissingRequiredTagException e) {
-            try {
+            try { // is it an ID assignation message?
                 FixIdAssignation idMsg = FixIdAssignation.fromFix(msg, new FixIdAssignation());
 
-                if (assignedId.isEmpty())
+                if (assignedId.isEmpty()) {
                     assignedId = idMsg.getTarget();
-                else
+                    return sendStateMessage();
+                } else {
                     log.warn("Exchange service: ID re-assignation operation!");
+                }
             } catch (MissingRequiredTagException ex) {
                 log.warn("Exchange service: received message is not supported. Ignoring.");
             }
+        } catch (IllegalStateException e) {
+            log.warn("Exchange service: received message is not valid FIX request");
         }
         return Mono.empty();
+    }
+
+    private Mono<Void> sendStateMessage() {
+        return stockRepo.findAll()
+                .collectMap(InstrumentEntry::name, InstrumentEntry::amount)
+                .flatMap(map -> {
+                    try {
+                        // Serialize the map to a JSON string
+                        String jsonState = objectMapper.writeValueAsString(
+                                new StocksStateMessage(Map.of(assignedId, map))
+                        );
+
+                        // Send the JSON string as a response
+                        return connection.outbound()
+                                .sendString(Mono.just(jsonState), StandardCharsets.UTF_8)
+                                .then(); // Complete the send operation
+                    } catch (JsonProcessingException e) {
+                        // Handle JSON serialization error
+                        return Mono.error(new RuntimeException("Failed to serialize state", e));
+                    }
+                });
+    }
+
+    private Mono<Void> sendResponse(FixRequest request) {
+        return processTradeRequest(request)
+                .flatMap(response -> {
+                    try {
+                        return connection.outbound()
+                                .sendString(Mono.just(response.asFix()),
+                                        StandardCharsets.UTF_8)
+                                .then();
+                    } catch (MissingRequiredTagException e) {
+                        log.error("Exchange service: response assembly failed. This can't happen.");
+                        return Mono.empty();
+                    }
+                })
+                .doOnError(e -> log.error("Failed to process or respond to trade request: {}", e.getMessage()))
+                .then();
     }
 
     public Mono<FixResponse> processTradeRequest(FixRequest request) {
         return stockRepo.findByName(request.getInstrument())
                 .flatMap(entry -> {
                     FixResponse response = new FixResponse(
-                            request.getTarget(),
-                            request.getSender(),
-                            request.getSenderSubId(),
+                            assignedId,                 // sender
+                            request.getSender(),        // receiving service id
+                            request.getSenderSubId(),   // receiving client id
                             request.getInstrument(),
                             request.getAction(),
                             request.getAmount(),
@@ -149,8 +183,11 @@ public class ExchangeServiceImpl {
     }
 
     private Mono<InstrumentEntry> updateStockQuantity(InstrumentEntry entry, int updatedAmount) {
-        // Update the quantity in the database and return the updated entry
-        InstrumentEntry updatedEntry = new InstrumentEntry(entry.id(), entry.name(), updatedAmount);
+        InstrumentEntry updatedEntry = new InstrumentEntry(
+                entry.id(),
+                entry.name(),
+                updatedAmount
+        );
         return stockRepo.save(updatedEntry);
     }
 }

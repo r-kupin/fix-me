@@ -5,7 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.InputEvent;
 import com.rokupin.broker.model.InitialStockStateMessage;
-import com.rokupin.broker.model.StocksStateMessage;
+import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;
 import com.rokupin.model.fix.MissingRequiredTagException;

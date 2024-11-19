@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.model.InitialStockStateMessage;
-import com.rokupin.broker.model.StocksStateMessage;
+import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.ClientTradingRequest;
 import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;

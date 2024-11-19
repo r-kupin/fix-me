@@ -1,8 +1,9 @@
 package com.rokupin.exchange;
 
-import com.rokupin.model.fix.FixIdAssignation;
-import com.rokupin.model.fix.FixRequest;
-import com.rokupin.model.fix.MissingRequiredTagException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rokupin.model.StocksStateMessage;
+import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -16,10 +17,12 @@ import java.util.concurrent.TimeUnit;
 
 public class FixTradeExchangeCommunicationTest {
     private TcpServer mockRouterServer;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     public void setup() {
         mockRouterServer = TcpServer.create().host("localhost").port(5001);
+        objectMapper = new ObjectMapper();
     }
 
     @Test
@@ -29,12 +32,25 @@ public class FixTradeExchangeCommunicationTest {
         DisposableServer server = mockRouterServer.doOnConnection(connection -> connection.outbound()
                 .sendString(Mono.just(makeIdAssignationMsg()), StandardCharsets.UTF_8)
                 .then()
-                .thenMany(connection.outbound().sendString(Mono.just(makeRequest()), StandardCharsets.UTF_8).then())
+                .thenMany(connection.outbound().sendString(Mono.just(makeRequest()),
+                        StandardCharsets.UTF_8).then())
                 .subscribe()
         ).handle((inbound, outbound) -> inbound.receive()
                 .asString(StandardCharsets.UTF_8)
                 .flatMap(payload -> {
                     System.out.println("External API mock: received '" + payload + "'");
+                    try {
+                        StocksStateMessage stockState = objectMapper.readValue(payload, StocksStateMessage.class);
+                        System.out.println("External API mock: parsed '" + stockState + "'");
+                    } catch (JsonProcessingException e) {
+                        try {
+                            FixResponse fix = FixMessage.fromFix(payload, new FixResponse());
+                            System.out.println("External API mock: parsed '" + fix + "'");
+                        } catch (MissingRequiredTagException ex) {
+                            assert false;
+                            return null;
+                        }
+                    }
                     return Flux.empty();
                 })
                 .then()

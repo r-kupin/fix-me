@@ -1,22 +1,14 @@
 package com.rokupin.model.fix;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
-
 import java.util.Map;
 
-@EqualsAndHashCode(callSuper = true)
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
-public class FixIdAssignation extends FixMessage {
-    // 1st custom message type - ID assignation message
-    private static final String MSG_ID_ASSIGNATION = "U1";
+public class FixIdAssignationStockState extends FixMessage {
+    // 3rd custom message type - ID assignation message with stock states
+    private static final String MSG_ID_ASSIGNATION_WITH_STOCKS = "U3";
 
-    private String sender;  // SenderCompID (49)
-    private String target;  // TargetCompID (56) >> assigned ID
+    private String sender;      // SenderCompID (49)
+    private String target;      // TargetCompID (56)    >> assigned ID
+    private Map<String, Map<String, Integer>> stocks;
 
     @Override
     protected void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException {
@@ -26,7 +18,7 @@ public class FixIdAssignation extends FixMessage {
 
     @Override
     protected void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException {
-        appendTag(fixMessage, TAG_MSG_TYPE, MSG_ID_ASSIGNATION);
+        appendTag(fixMessage, TAG_MSG_TYPE, MSG_ID_ASSIGNATION_WITH_STOCKS);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_TARGET_COMP_ID, target);
     }

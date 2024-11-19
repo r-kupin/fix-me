@@ -42,7 +42,6 @@ public class FixRequest extends FixMessage {
 
     @Override
     protected void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException {
-        appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
         appendTag(fixMessage, TAG_MSG_TYPE, MSG_TYPE_NEW_ORDER);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_SOURCE_SUB_ID, senderSubId);

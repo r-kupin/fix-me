@@ -21,7 +21,7 @@ public class FixResponse extends FixMessage {
     private static final int TAG_ORD_STATUS = 39;
     private static final int TAG_TARGET_SUB_ID = 57;
     private static final int TAG_EXEC_TYPE = 150;
-    private static final int MSG_EXECUTION_REPORT = 8;
+    private static final String MSG_EXECUTION_REPORT = "8";
 
     private String sender;      // SenderCompID (49)
     private String target;      // TargetCompID (56)    >> assigned ID
@@ -44,8 +44,7 @@ public class FixResponse extends FixMessage {
 
     @Override
     protected void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException {
-        appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
-        appendTag(fixMessage, TAG_MSG_TYPE, String.valueOf(MSG_EXECUTION_REPORT));
+        appendTag(fixMessage, TAG_MSG_TYPE, MSG_EXECUTION_REPORT);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_TARGET_COMP_ID, target);
         appendTag(fixMessage, TAG_TARGET_SUB_ID, targetSubId);
