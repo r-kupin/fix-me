@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -41,7 +42,6 @@ public class ExchangeServiceImpl {
         this.objectMapper = objectMapper;
         this.stockRepo = stockRepo;
         this.connection = connectTcpClient(host, port);
-        this.assignedId = "";
     }
 
     private Connection connectTcpClient(String host, int port) {
@@ -97,10 +97,11 @@ public class ExchangeServiceImpl {
 
         try { // is it a trading request?
             FixRequest request = FixResponse.fromFix(msg, new FixRequest());
-            if (!assignedId.isEmpty()) {
+            if (!Objects.isNull(assignedId)) {
                 return sendResponse(request);
-            } else
+            } else {
                 log.warn("Exchange service: received trading request before ID was assigned");
+            }
         } catch (MissingRequiredTagException e) {
             try { // is it an ID assignation message?
                 FixIdAssignation idMsg = FixIdAssignation.fromFix(msg, new FixIdAssignation());

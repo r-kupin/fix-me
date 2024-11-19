@@ -17,8 +17,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.Connection;
 import reactor.netty.tcp.TcpClient;
+import reactor.util.retry.Retry;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -53,15 +55,119 @@ public class TradingServiceImpl implements TradingService {
         connection = TcpClient.create()
                 .host(host)
                 .port(port)
-                .handle((inbound, outbound) ->
-                        // handle the incoming data (responses / updates from router)
-                        inbound.receive()
-                                .asString(StandardCharsets.UTF_8)
-                                .doOnNext(this::handleIncomingMessage)
-                                .then() // Handle incoming messages
-                )
-                .connect()
-                .cast(Connection.class); // lazy, initialized on first call
+                .handle((inbound, outbound) -> inbound.receive()
+                        .asString(StandardCharsets.UTF_8)
+                        .flatMap(this::handleIncomingMessage)
+                        .then()
+                ).connect()
+                .doOnError(e -> log.info("Connection failed: {}", e.getMessage()))
+                .retryWhen(retrySpec())
+                .doOnSuccess(conn -> log.info("Connected successfully to {}:{}", host, port))
+                .cast(Connection.class);
+    }
+
+    private Retry retrySpec() {
+        return Retry.backoff(5, Duration.ofSeconds(2)) // Retry up to 5 times with exponential backoff
+                .maxBackoff(Duration.ofSeconds(10))   // Cap delay at 10 seconds
+                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
+                        new RuntimeException("Max retry attempts reached."));
+    }
+
+    private Mono<Void> handleIncomingMessage(String message) {
+        log.info("TCPService: received message: '{}'", message);
+        try { // received state update
+            InitialStockStateMessage initialMessage = objectMapper.readValue(
+                    message, InitialStockStateMessage.class);
+            return updateStateInitial(initialMessage);
+        } catch (JsonProcessingException e) {
+            try { // received trading response
+                FixResponse response = FixResponse.fromFix(message, new FixResponse());
+                return updateState(response);
+            } catch (MissingRequiredTagException ex) {
+                try {
+                    return updateStateFollowing(message);
+                } catch (JsonProcessingException exception) {
+                    log.warn("TCP client received invalid message");
+                    return Mono.empty();
+                }
+            }
+        }
+    }
+
+    private Mono<Void> updateStateInitial(InitialStockStateMessage initialMessage) {
+        if (Objects.isNull(assignedId)) {
+            initialMessage.getStocks().forEach(this::updateState);
+            assignedId = initialMessage.getAssignedId();
+            initialStateSink.tryEmitNext(serializeCurrentState());
+            log.info("TCPService: stock state updated from initial update. " +
+                    "Emitting update to the flux.");
+        } else {
+            log.warn("TCPService: repeatable init messages received.");
+        }
+        return Mono.empty();
+    }
+
+
+    private void updateState(String stockId, Map<String, Integer> stockState) {
+        if (currentStockState.containsKey(stockId)) {
+            currentStockState.replace(stockId, stockState);
+        } else {
+            currentStockState.put(stockId, new HashMap<>(stockState));
+        }
+    }
+
+    private Mono<Void> updateStateFollowing(String message) throws JsonProcessingException {
+        Map<String, Map<String, Integer>> state =
+                objectMapper.readValue(message, new TypeReference<>() {
+                });
+        state.forEach((stockId, stockState) -> {
+            updateState(stockId, stockState);
+            publisher.publishEvent(
+                    new InputEvent<>(
+                            new StocksStateMessage(Map.of(stockId, stockState))));
+        });
+        log.info("TCPService: stock state updated from router-sent state update. " +
+                "Publishing update event.");
+        return Mono.empty();
+    }
+
+    // todo: Might not publish response if went wrong
+    private Mono<Void> updateState(FixResponse response) {
+        String id = response.getSender();
+
+        if (!currentStockState.containsKey(id)) {
+            log.warn("Response from unknown stock id: {}", id);
+            return Mono.empty();
+        }
+        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
+            Map<String, Integer> stock = currentStockState.get(id);
+            String instrument = response.getInstrument();
+            if (!stock.containsKey(instrument)) {
+                log.warn("Stock id: {} sent response on unknown " +
+                        "instrument: {}", id, instrument);
+                return Mono.empty();
+            }
+
+            int before = stock.get(instrument);
+            int after = response.getAction().equals("buy") ?
+                    before - response.getAmount() : before + response.getAmount();
+            if (after < 0) {
+                log.warn("Remaining instrument amount can't be negative." +
+                                "stock response: '{}', current amount: {}",
+                        response, before);
+                return Mono.empty();
+            }
+            stock.replace(instrument, after);
+            publisher.publishEvent(
+                    new InputEvent<>(
+                            new StocksStateMessage(
+                                    Map.of(id, currentStockState.get(id)))));
+
+            log.info("TCPService: published 2 events");
+        }
+        publisher.publishEvent(new InputEvent<>(response));
+        return Mono.empty();
     }
 
     @Override
@@ -108,95 +214,5 @@ public class TradingServiceImpl implements TradingService {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize currentStockState");
         }
-    }
-
-    private void handleIncomingMessage(String message) {
-        log.info("TCPService: received message: '{}'", message);
-        try { // received state update
-            updateStateInitial(message);
-        } catch (JsonProcessingException e) {
-            try { // received trading response
-                updateState(FixResponse.fromFix(message, new FixResponse()));
-            } catch (MissingRequiredTagException ex) {
-                try {
-                    updateStateFollowing(message);
-                } catch (JsonProcessingException exception) {
-                    log.warn("TCP client received invalid message");
-                }
-            }
-        }
-    }
-
-    private void updateState(String stockId, Map<String, Integer> stockState) {
-        if (currentStockState.containsKey(stockId)) {
-            currentStockState.replace(stockId, stockState);
-        } else {
-            currentStockState.put(stockId, new HashMap<>(stockState));
-        }
-    }
-
-    private void updateStateInitial(String message) throws JsonProcessingException {
-        InitialStockStateMessage initialMessage =
-                objectMapper.readValue(message, InitialStockStateMessage.class);
-        if (Objects.isNull(assignedId)) {
-            initialMessage.getStocks().forEach(this::updateState);
-            assignedId = initialMessage.getAssignedId();
-            initialStateSink.tryEmitNext(serializeCurrentState());
-            log.info("TCPService: stock state updated from initial update. " +
-                    "Emitting update to the flux.");
-        } else {
-            log.warn("TCPService: repeatable init messages received.");
-        }
-    }
-
-    private void updateStateFollowing(String message) throws JsonProcessingException {
-        Map<String, Map<String, Integer>> state =
-                objectMapper.readValue(message, new TypeReference<>() {
-                });
-        state.forEach((stockId, stockState) -> {
-            updateState(stockId, stockState);
-            publisher.publishEvent(
-                    new InputEvent<>(
-                            new StocksStateMessage(Map.of(stockId, stockState))));
-        });
-        log.info("TCPService: stock state updated from router-sent state update. " +
-                "Publishing update event.");
-    }
-
-    // todo: Might not publish response if went wrong
-    private void updateState(FixResponse response) {
-        String id = response.getSender();
-
-        if (!currentStockState.containsKey(id)) {
-            log.warn("Response from unknown stock id: {}", id);
-            return;
-        }
-        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
-            Map<String, Integer> stock = currentStockState.get(id);
-            String instrument = response.getInstrument();
-            if (!stock.containsKey(instrument)) {
-                log.warn("Stock id: {} sent response on unknown " +
-                        "instrument: {}", id, instrument);
-                return;
-            }
-
-            int before = stock.get(instrument);
-            int after = response.getAction().equals("buy") ?
-                    before - response.getAmount() : before + response.getAmount();
-            if (after < 0) {
-                log.warn("Remaining instrument amount can't be negative." +
-                                "stock response: '{}', current amount: {}",
-                        response, before);
-                return;
-            }
-            stock.replace(instrument, after);
-            publisher.publishEvent(
-                    new InputEvent<>(
-                            new StocksStateMessage(
-                                    Map.of(id, currentStockState.get(id)))));
-
-            log.info("TCPService: published 2 events");
-        }
-        publisher.publishEvent(new InputEvent<>(response));
     }
 }

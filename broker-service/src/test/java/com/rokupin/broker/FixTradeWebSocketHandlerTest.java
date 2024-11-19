@@ -55,7 +55,7 @@ public class FixTradeWebSocketHandlerTest {
         stock2.put("TEST3", 3);
         stock2.put("TEST4", 4);
 
-        return Map.of("000000", stock1, "000001", stock2);
+        return Map.of("E00000", stock1, "E00001", stock2);
     }
 
     @Test
@@ -157,13 +157,13 @@ public class FixTradeWebSocketHandlerTest {
                 stateJson, new TypeReference<>() {
                 }
         );
-        if (!stocksStateMessages.containsKey("000000")) {
+        if (!stocksStateMessages.containsKey("E00000")) {
             System.out.println("Received StockStates lacking of expected stock data");
             assert false;
             return null;
         }
         String requestJson = objectMapper.writeValueAsString(
-                new ClientTradingRequest("000000",
+                new ClientTradingRequest("E00000",
                 clientMockId == 2 ? "TEST2" : "TEST1",
                 clientMockId == 2 ? "sell" : "buy",
                 1
