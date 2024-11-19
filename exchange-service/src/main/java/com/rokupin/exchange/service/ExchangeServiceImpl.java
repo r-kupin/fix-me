@@ -17,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 import reactor.netty.tcp.TcpClient;
+import reactor.util.retry.Retry;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -51,17 +52,20 @@ public class ExchangeServiceImpl {
                         .asString(StandardCharsets.UTF_8)
                         .flatMap(this::handleIncomingData)
                         .then());
-        client.warmup().block();
-        return persistConnectionAttempts(client);
+
+        return client.connect()
+                .doOnError(e -> log.info("Connection failed: {}", e.getMessage()))
+                .retryWhen(retrySpec())
+                .doOnSuccess(conn -> log.info("Connected successfully to {}:{}", host, port))
+                .block();
     }
 
-    private Connection persistConnectionAttempts(TcpClient client) {
-        try {
-            return client.connect().block(Duration.ofSeconds(10));
-        } catch (Exception e) {
-            log.info("Can't connect: {}", e.getMessage());
-        }
-        return persistConnectionAttempts(client);
+    private Retry retrySpec() {
+        return Retry.backoff(5, Duration.ofSeconds(2)) // Retry up to 5 times with exponential backoff
+                .maxBackoff(Duration.ofSeconds(10))   // Cap delay at 10 seconds
+                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
+                        new RuntimeException("Max retry attempts reached."));
     }
 
     private Mono<Void> handleIncomingData(String data) {
