@@ -13,7 +13,6 @@ import reactor.netty.tcp.TcpServer;
 import reactor.test.StepVerifier;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Map;
 
 public class FixTradeExchangeCommunicationTest {
@@ -34,6 +33,7 @@ public class FixTradeExchangeCommunicationTest {
      */
     @Test
     public void connectionTest() {
+        Map<String, Integer> expectedState = Map.of("TEST1", 1, "TEST2", 2);
         String exchangeID = "E00000";
 
         DisposableServer server = mockRouterServer
@@ -41,29 +41,25 @@ public class FixTradeExchangeCommunicationTest {
                         .sendString(Mono.just(makeIdAssignationMsg(exchangeID)), StandardCharsets.UTF_8)
                         .then()
                         .subscribe()) // Send ID assignation on client connection
-                .handle((inbound, outbound) ->
-                        inbound.receive()
-                                .asString(StandardCharsets.UTF_8)
-                                .flatMap(payload -> {
-                                    System.out.println("External API mock: received '" + payload + "'");
-                                    return processIncommingMessages(outbound, payload, exchangeID);
-                                })
-                                .then()
-                )
-                .bindNow(); // Bind the server and make it ready to accept connections
+                .handle((inbound, outbound) -> inbound.receive()
+                        .asString(StandardCharsets.UTF_8)
+                        .flatMap(payload -> {
+                            System.out.println("External API mock: received '" + payload + "'");
+                            return processIncomingMessages(outbound, payload, exchangeID, expectedState);
+                        }).then()
+                ).bindNow();
 
-        // Use StepVerifier to validate the test flow
         StepVerifier.create(server.onDispose())
-                .expectComplete() // Verify the server completes after handling responses
-                .verify(Duration.ofSeconds(20)); // Timeout to ensure test doesn't hang
+                .expectComplete()
+                .verify();
 
-        server.disposeNow(); // Ensure cleanup
+        server.disposeNow();
     }
 
-    private Mono<Void> processIncommingMessages(NettyOutbound outbound,
-                                                String payload,
-                                                String exchangeID) {
-        Map<String, Integer> expectedState = Map.of("TEST1", 1, "TEST2", 2);
+    private Mono<Void> processIncomingMessages(NettyOutbound outbound,
+                                               String payload,
+                                               String exchangeID,
+                                               Map<String, Integer> expectedState) {
 
         try {
             StocksStateMessage state = objectMapper.readValue(payload, StocksStateMessage.class);

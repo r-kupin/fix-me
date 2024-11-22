@@ -9,6 +9,7 @@ import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.ClientTradingRequest;
 import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -25,6 +26,7 @@ import java.util.function.Consumer;
 @Component
 @Slf4j
 public class TradingWebSocketHandler implements WebSocketHandler {
+
 
     private final TradingService tradingService;
     //    private final Map<String, WebSocketSession> activeClients;
@@ -43,6 +45,11 @@ public class TradingWebSocketHandler implements WebSocketHandler {
 //        this.activeClients = new ConcurrentHashMap<>();
     }
 
+    @PostConstruct
+    private void init() {
+        tradingService.silentConnectToRouter();
+    }
+
     @Override
     public Mono<Void> handle(WebSocketSession session) {
         String sessionId = session.getId();
@@ -56,7 +63,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
 
         return session.send(combineOutputs(onConnection, onClientMessage, onStateUpdate, onTradeResponse, sessionId))
                 .doOnError(e -> log.error("Session {} encountered error: {}", sessionId, e.getMessage()))
-                .doFinally(handleSessionShutwown(session));
+                .doFinally(handleSessionShutdown(session));
     }
 
     private Flux<WebSocketMessage> combineOutputs(Mono<WebSocketMessage> onConnection,
@@ -72,7 +79,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId));
     }
 
-    private Consumer<SignalType> handleSessionShutwown(WebSocketSession session) {
+    private Consumer<SignalType> handleSessionShutdown(WebSocketSession session) {
         return signalType -> {
             log.info("Session {} cleanup triggered with signal: {}", session.getId(), signalType);
 //                    activeClients.remove(sessionId);
@@ -85,8 +92,10 @@ public class TradingWebSocketHandler implements WebSocketHandler {
 
     private Mono<WebSocketMessage> handleNewClient(WebSocketSession session) {
         return tradingService.getState()
-                .doOnNext(state -> log.info("WSHandler [{}]: received state '{}' via getState", session.getId(), state))
-                .map(session::textMessage);
+                .doOnNext(state -> log.info(
+                        "WSHandler [{}]: received state '{}' via getState",
+                        session.getId(), state)
+                ).map(session::textMessage);
     }
 
     //    class FuncImpl implements Function<Flux<String>, String> {

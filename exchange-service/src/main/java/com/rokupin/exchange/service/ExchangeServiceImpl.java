@@ -88,7 +88,6 @@ public class ExchangeServiceImpl {
                 currentMessage.setLength(0); // Reset for the next message
             }
         }
-
         return fixMessages;
     }
 

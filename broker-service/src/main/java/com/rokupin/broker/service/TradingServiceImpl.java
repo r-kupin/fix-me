@@ -31,15 +31,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class TradingServiceImpl implements TradingService {
     private final ObjectMapper objectMapper;
-
-    private final Mono<Connection> connection;
+    private final String host;
+    private final int port;
     private final ApplicationEventPublisher publisher;
-    private final Sinks.Many<String> initialStateSink;
+    private final AtomicBoolean connectioInProgress;
     private final AtomicBoolean updateRequested;
-
+    private Sinks.Many<String> initialStateSink;
     // StockId : {Instrument : AmountAvailable}
     private final Map<String, Map<String, Integer>> currentStockState;
-
+    private Connection connection;
     private String assignedId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
@@ -48,11 +48,31 @@ public class TradingServiceImpl implements TradingService {
                               @Value("${tcp.port}") int port) {
         this.publisher = publisher;
         this.objectMapper = objectMapper;
+        this.host = host;
+        this.port = port;
         this.currentStockState = new ConcurrentHashMap<>();
         this.updateRequested = new AtomicBoolean(false);
+        this.connectioInProgress = new AtomicBoolean(false);
         this.initialStateSink = Sinks.many().replay().all();
+//        this.initialStateSink = Sinks.many().replay().all();
+    }
 
-        connection = TcpClient.create()
+    // -------------------------- Connection to Router
+    private void feedbackReconnectToRouter() {
+        if (Objects.isNull(connection) &&
+                connectioInProgress.compareAndSet(false, true)) {
+            connectToRouter().onErrorResume(e -> {
+                connectioInProgress.set(false);
+                initialStateSink.tryEmitNext(
+                        "Router service is unavailable. Try to reconnect later.");
+                log.info("TCPService: Connection attempts exhausted. Reporting failure.");
+                return Mono.empty();
+            }).subscribe();
+        }
+    }
+
+    private Mono<? extends Connection> connectToRouter() {
+        return TcpClient.create()
                 .host(host)
                 .port(port)
                 .handle((inbound, outbound) -> inbound.receive()
@@ -60,19 +80,27 @@ public class TradingServiceImpl implements TradingService {
                         .flatMap(this::handleIncomingMessage)
                         .then()
                 ).connect()
-                .doOnError(e -> log.info("Connection failed: {}", e.getMessage()))
                 .retryWhen(retrySpec())
-                .doOnSuccess(conn -> log.info("Connected successfully to {}:{}", host, port))
-                .cast(Connection.class);
+                .doOnError(e -> {
+                    log.info("TCPService: Connection failed: {}", e.getMessage());
+                    connection = null;
+                }).doOnSuccess(conn -> {
+                    this.connection = conn;
+                    connectioInProgress.set(false);
+                    log.info("TCPService: Connected successfully to {}:{}", host, port);
+                });
     }
 
+
     private Retry retrySpec() {
-        return Retry.backoff(5, Duration.ofSeconds(2)) // Retry up to 5 times with exponential backoff
-                .maxBackoff(Duration.ofSeconds(10))   // Cap delay at 10 seconds
-                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
+        return Retry.backoff(5, Duration.ofSeconds(2))
+                .maxBackoff(Duration.ofSeconds(10))
+                .doBeforeRetry(signal -> log.info("TCPService: retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
-                        new RuntimeException("Max retry attempts reached."));
+                        new RuntimeException("TCPService: Max retry attempts reached."));
     }
+
+// -------------------------- Events from Router processing
 
     private Mono<Void> handleIncomingMessage(String message) {
         log.info("TCPService: received message: '{}'", message);
@@ -105,9 +133,9 @@ public class TradingServiceImpl implements TradingService {
         } else {
             log.warn("TCPService: repeatable init messages received.");
         }
+        updateRequested.set(false);
         return Mono.empty();
     }
-
 
     private void updateState(String stockId, Map<String, Integer> stockState) {
         if (currentStockState.containsKey(stockId)) {
@@ -129,6 +157,7 @@ public class TradingServiceImpl implements TradingService {
         });
         log.info("TCPService: stock state updated from router-sent state update. " +
                 "Publishing update event.");
+        updateRequested.set(false);
         return Mono.empty();
     }
 
@@ -170,43 +199,78 @@ public class TradingServiceImpl implements TradingService {
         return Mono.empty();
     }
 
+// -------------------------- To be triggered by WS Handler
+
     @Override
-    public Mono<String> handleTradingRequest(FixRequest tradeRequest) {
-        try {
-            if (assignedId.isEmpty())
-                return Mono.just("Trading request not sent:" +
-                        " this broker service has no assigned ID");
-            tradeRequest.setSender(assignedId);
-            String fix = tradeRequest.asFix();
-            log.info("TCPService: sending message '{}'", fix);
-            return connection.flatMap(con -> con.outbound()
-                            .sendString(Mono.just(fix), StandardCharsets.UTF_8)
-                            .then()
-                            .thenReturn("Trading request sent"))
-                    .onErrorResume(e -> Mono.just("Trading request not sent:" +
-                            " router service isn't available"));
-        } catch (MissingRequiredTagException e) {
-            return Mono.just("Trading request not sent: " + e);
+    public void silentConnectToRouter() {
+        if (Objects.isNull(connection) &&
+                connectioInProgress.compareAndSet(false, true)) {
+            connectToRouter().onErrorResume(e -> {
+                initialStateSink.tryEmitNext(
+                        "Router service is unavailable. Try to reconnect later.");
+                log.info("TCPService: Connection attempts exhausted. Reporting failure.");
+                connectioInProgress.set(false);
+                return Mono.empty();
+            }).subscribe();
         }
     }
 
+    @Override
+    public Mono<String> handleTradingRequest(FixRequest tradeRequest) {
+        if (Objects.nonNull(connection)) {
+            try {
+                if (assignedId.isEmpty())
+                    return Mono.just("Trading request not sent:" +
+                            " this broker service has no assigned ID");
+                tradeRequest.setSender(assignedId);
+                String fix = tradeRequest.asFix();
+                log.info("TCPService: sending message '{}'", fix);
+                return connection.outbound()
+                        .sendString(Mono.just(fix), StandardCharsets.UTF_8)
+                        .then()
+                        .thenReturn("Trading request sent")
+                        .onErrorResume(e -> Mono.just("Trading request not sent:" +
+                                " router service isn't available"));
+            } catch (MissingRequiredTagException e) {
+                return Mono.just("Trading request not sent: " + e);
+            }
+        } else {
+            silentConnectToRouter();
+            if (Objects.isNull(connection))
+                return Mono.just("Trading request not sent:" +
+                        "Router service is unavailable.");
+            else
+                return handleTradingRequest(tradeRequest);
+        }
+    }
+
+    @Override
     public Mono<String> getState() {
         // If cache is not empty, return the cached state immediately
         if (!currentStockState.isEmpty()) {
             return Mono.just(serializeCurrentState());
-        }
-
-        // Stock state cache is empty
-        if (updateRequested.compareAndSet(false, true)) {
-            // Ask for initialisation
-            connection.flatMap(conn -> conn.outbound()
-                    .sendString(Mono.just("STATE_UPD"), StandardCharsets.UTF_8)
-                    .then()
-            ).subscribe();
+        } else {
+            // Stock state cache is empty
+            if (Objects.nonNull(connection)) {
+                // connection established
+                if (updateRequested.compareAndSet(false, true)) {
+                    // Ask for initialisation
+                    connection.outbound()
+                            .sendString(Mono.just("STATE_UPD"),
+                                    StandardCharsets.UTF_8);
+                }
+            } else {
+                if (!connectioInProgress.get()) {
+                    initialStateSink = Sinks.many().replay().all();
+                    feedbackReconnectToRouter();
+                }
+            }
         }
         // Listen to the flux, states will be published upon router's answer
         return initialStateSink.asFlux().next();
     }
+
+// -------------------------- Util
 
     private String serializeCurrentState() {
         try {

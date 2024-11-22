@@ -5,34 +5,32 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.model.InitialStockStateMessage;
 import com.rokupin.model.StocksStateMessage;
-import com.rokupin.model.fix.ClientTradingRequest;
-import com.rokupin.model.fix.FixRequest;
-import com.rokupin.model.fix.FixResponse;
-import com.rokupin.model.fix.MissingRequiredTagException;
+import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
 import org.springframework.web.reactive.socket.client.WebSocketClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.DisposableServer;
+import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpServer;
 import reactor.test.StepVerifier;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class FixTradeWebSocketHandlerTest {
 
     private final int port = 8081;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    @Autowired
     private ObjectMapper objectMapper;
     private WebSocketClient mockClient;
     private TcpServer mockRouterServer;
@@ -46,7 +44,7 @@ public class FixTradeWebSocketHandlerTest {
         brockerServiceWsUri = URI.create("ws://localhost:" + port + "/ws/requests");
     }
 
-    public Map<String, Map<String, Integer>> initStocksMock() {
+    public Map<String, Map<String, Integer>> initStocksMock(String exchange1ID, String exchange2ID) {
         Map<String, Integer> stock1 = new HashMap<>();
         stock1.put("TEST1", 1);
         stock1.put("TEST2", 2);
@@ -55,49 +53,17 @@ public class FixTradeWebSocketHandlerTest {
         stock2.put("TEST3", 3);
         stock2.put("TEST4", 4);
 
-        return Map.of("E00000", stock1, "E00001", stock2);
+        return Map.of(exchange1ID, stock1, exchange2ID, stock2);
     }
 
     @Test
     public void routerUpdateBroadcastsToClients() {
         WebSocketClient mockClient_2 = new ReactorNettyWebSocketClient();
         WebSocketClient mockClient_3 = new ReactorNettyWebSocketClient();
-        Map<String, Map<String, Integer>> stocks = initStocksMock();
-
-
-        // on Message - update state, then post current to broker service
-        mockRouterServer.handle(
-                        (nettyInbound, nettyOutbound) -> nettyInbound.receive()
-                        .asString(StandardCharsets.UTF_8)
-                        .doOnNext(payload -> System.out.println("External" +
-                                " API mock: received '" + payload + "'"))
-                        .map(payload -> {
-                            try {
-                                FixRequest fixRequest = FixRequest.fromFix(payload, new FixRequest());
-                                FixResponse upd = updateMockStock(stocks, fixRequest);
-                                return upd.asFix();
-                            } catch (MissingRequiredTagException e) {
-                                if (payload.equals("STATE_UPD")) {
-                                    try {
-                                        return objectMapper.writeValueAsString(
-                                                new InitialStockStateMessage("000001", stocks));
-                                    } catch (JsonProcessingException ex) {
-                                        assert false;
-                                        return null;
-                                    }
-                                } else {
-                                    assert false;
-                                    return null;
-                                }
-                            }
-                        }).flatMap(updStr ->
-                                nettyOutbound.sendString(Mono.just(updStr))
-                                        .then(Mono.fromRunnable(() ->
-                                                System.out.println("External API mock: sent: '" +
-                                                        updStr + "'")))
-                        ).then())
-                .bind().subscribe();
-
+        String brokerID = "B00000";
+        String exchange1ID = "E00000";
+        String exchange2ID = "E00001";
+        Map<String, Map<String, Integer>> stocks = initStocksMock(exchange1ID, exchange2ID);
 
         Mono<Void> clientExecution1 = mockClient.execute(brockerServiceWsUri,
                 session -> sendRequestWaitForStockStateUpdate(session, 1));
@@ -108,35 +74,99 @@ public class FixTradeWebSocketHandlerTest {
         Mono<Void> clientExecution3 = mockClient_3.execute(brockerServiceWsUri,
                 session -> sendRequestWaitForStockStateUpdate(session, 3));
 
-        StepVerifier.create(Mono.when(clientExecution1,
+        DisposableServer server = mockRouterServer
+                .doOnConnection(connection -> connection.outbound()
+                        .sendString(Mono.just(makeJsonInitialMsg(brokerID, stocks)), StandardCharsets.UTF_8)
+                        .then()
+                        .subscribe()
+                ).handle((inbound, outbound) -> inbound.receive()
+                        .asString(StandardCharsets.UTF_8)
+                        .flatMap(payload -> handleIncomingData(payload, stocks, brokerID, outbound))
+                        .doOnError(e -> {
+                            throw new AssertionError(e.getMessage());
+                        }).then()
+                ).bindNow();
+
+        Mono<Void> clientsExecution = Mono.when(clientExecution1,
                         clientExecution2,
-                        clientExecution3))
-                .expectComplete().verify();
+                        clientExecution3)
+                .then(Mono.defer(() -> Mono.fromRunnable(server::dispose)));
+
+        StepVerifier.create(Mono.when(clientsExecution, server.onDispose()))
+                .expectComplete()
+                .verify();
+    }
+
+    private Mono<Void> handleIncomingData(String data,
+                                          Map<String, Map<String, Integer>> stocks,
+                                          String brokerID,
+                                          NettyOutbound outbound) {
+        return Flux.fromIterable(splitFixMessages(data)) // Split into individual messages
+                .flatMap(msg -> processIncomingMessage(
+                        msg, stocks, brokerID, outbound
+                )).then();
+    }
+
+    private List<String> splitFixMessages(String messages) {
+        List<String> fixMessages = new ArrayList<>();
+        StringBuilder currentMessage = new StringBuilder();
+        String[] parts = messages.split("\u0001"); // Split by the SOH character
+
+        for (String part : parts) {
+            currentMessage.append(part).append("\u0001"); // Re-add the delimiter
+            if (part.startsWith("10=")) { // Detect the end of a FIX message
+                fixMessages.add(currentMessage.toString());
+                currentMessage.setLength(0); // Reset for the next message
+            }
+        }
+        return fixMessages;
+    }
+
+    private Mono<Void> processIncomingMessage(String payload,
+                                              Map<String, Map<String, Integer>> stocks,
+                                              String brokerID,
+                                              NettyOutbound outbound) {
+        System.out.println("External API mock: received '" + payload + "'");
+        try {
+            FixRequest request = FixRequest.fromFix(payload, new FixRequest());
+            if (request.getSender().equals(brokerID)) {
+                String fix = updateMockStock(stocks, request).asFix();
+                System.out.println("External API mock: sending: '" + fix + "'");
+                return outbound.sendString(Mono.just(fix), StandardCharsets.UTF_8).then();
+            }
+            return Mono.error(new AssertionError("Received message is not supported"));
+        } catch (MissingRequiredTagException e) {
+            return Mono.error(new AssertionError("Received message is not supported"));
+        }
     }
 
     private Mono<Void> sendRequestWaitForStockStateUpdate(WebSocketSession session, int clientMockId) {
         return session.receive()
                 .map(WebSocketMessage::getPayloadAsText)
-                .doOnNext(msg -> System.out.println("WS ClientMock" + clientMockId +
-                        ": received : '" + msg + "'"))
                 .flatMap(msg -> {
-                    try {
-                        String requestJson = assembleTradingRequest(clientMockId, msg);
+                    System.out.println("WS ClientMock" + clientMockId +
+                            ": received : '" + msg + "'");
+                    try { // if message is a stocks state
+                        String requestJson = assembleTradingRequestJson(clientMockId, msg);
                         return session.send(Mono.just(session.textMessage(requestJson)));
                     } catch (JsonProcessingException e) {
-                        try {
+                        try { // if message is a trading response
                             processTradingResponse(clientMockId, msg);
                             return Mono.empty();
                         } catch (JsonProcessingException ex) {
-                            if (msg.equals("Trading request sent"))
+                            if (msg.equals("Trading request sent")) {
+                                // if message is a sending confirmation
                                 return Mono.empty();
+                            }
                             try {
                                 StocksStateMessage stocksStateMessage = objectMapper.readValue(msg, StocksStateMessage.class);
                                 System.out.println("WS ClientMock" + clientMockId + ": received : '" + stocksStateMessage + "'");
                                 return Mono.empty();
                             } catch (JsonProcessingException exception) {
-                                assert false;
-                                return null;
+//                                return Mono.error(new AssertionError(
+//                                        "Received message '" + msg +
+//                                                "' was expected to be a valid StocksStateMessage instance"));
+                                return Mono.empty();
                             }
                         }
                     }
@@ -152,7 +182,7 @@ public class FixTradeWebSocketHandlerTest {
                 ": received trading response: '" + responseJson + "'");
     }
 
-    private String assembleTradingRequest(int clientMockId, String stateJson) throws JsonProcessingException {
+    private String assembleTradingRequestJson(int clientMockId, String stateJson) throws JsonProcessingException {
         Map<String, Map<String, Integer>> stocksStateMessages = objectMapper.readValue(
                 stateJson, new TypeReference<>() {
                 }
@@ -164,10 +194,10 @@ public class FixTradeWebSocketHandlerTest {
         }
         String requestJson = objectMapper.writeValueAsString(
                 new ClientTradingRequest("E00000",
-                clientMockId == 2 ? "TEST2" : "TEST1",
-                clientMockId == 2 ? "sell" : "buy",
-                1
-        ));
+                        clientMockId == 2 ? "TEST2" : "TEST1",
+                        clientMockId == 2 ? "sell" : "buy",
+                        1
+                ));
         System.out.println("WS ClientMock" + clientMockId +
                 ": sends trading request: '" + requestJson + "'");
         return requestJson;
@@ -205,6 +235,37 @@ public class FixTradeWebSocketHandlerTest {
             return null;
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+
+    private String makeFixIdAssignationMsg(String brokerId) {
+        try {
+            return new FixIdAssignation("R00000", brokerId).asFix();
+        } catch (MissingRequiredTagException e) {
+            assert false;
+            return null;
+        }
+    }
+
+    private String makeJsonInitialMsg(String brokerID,
+                                      Map<String, Map<String, Integer>> stocks) {
+        try {
+            return objectMapper.writeValueAsString(
+                    new InitialStockStateMessage(brokerID, stocks)
+            );
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String serializeStockState(Map<String, Map<String, Integer>> stocks) {
+        lock.readLock().lock();
+        try {
+            return objectMapper.writeValueAsString(stocks);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 }
