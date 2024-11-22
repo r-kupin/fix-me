@@ -4,7 +4,7 @@ import com.rokupin.model.fix.FixRequest;
 import reactor.core.publisher.Mono;
 
 public interface TradingService {
-    void silentConnectToRouter();
+    void initiateRouterConnection();
 
     Mono<String> handleTradingRequest(FixRequest message);
 

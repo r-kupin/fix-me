@@ -47,7 +47,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
 
     @PostConstruct
     private void init() {
-        tradingService.silentConnectToRouter();
+        tradingService.initiateRouterConnection();
     }
 
     @Override

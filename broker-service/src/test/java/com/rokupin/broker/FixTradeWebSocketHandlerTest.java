@@ -3,7 +3,6 @@ package com.rokupin.broker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.broker.model.InitialStockStateMessage;
 import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +60,7 @@ public class FixTradeWebSocketHandlerTest {
         WebSocketClient mockClient_2 = new ReactorNettyWebSocketClient();
         WebSocketClient mockClient_3 = new ReactorNettyWebSocketClient();
         String brokerID = "B00000";
+        String routerID = "R00000";
         String exchange1ID = "E00000";
         String exchange2ID = "E00001";
         Map<String, Map<String, Integer>> stocks = initStocksMock(exchange1ID, exchange2ID);
@@ -76,7 +76,7 @@ public class FixTradeWebSocketHandlerTest {
 
         DisposableServer server = mockRouterServer
                 .doOnConnection(connection -> connection.outbound()
-                        .sendString(Mono.just(makeJsonInitialMsg(brokerID, stocks)), StandardCharsets.UTF_8)
+                        .sendString(Mono.just(makeJsonInitialMsg(routerID, brokerID, stocks)), StandardCharsets.UTF_8)
                         .then()
                         .subscribe()
                 ).handle((inbound, outbound) -> inbound.receive()
@@ -238,22 +238,14 @@ public class FixTradeWebSocketHandlerTest {
         }
     }
 
-    private String makeFixIdAssignationMsg(String brokerId) {
-        try {
-            return new FixIdAssignation("R00000", brokerId).asFix();
-        } catch (MissingRequiredTagException e) {
-            assert false;
-            return null;
-        }
-    }
-
-    private String makeJsonInitialMsg(String brokerID,
+    private String makeJsonInitialMsg(String routerID,
+                                      String brokerID,
                                       Map<String, Map<String, Integer>> stocks) {
         try {
-            return objectMapper.writeValueAsString(
-                    new InitialStockStateMessage(brokerID, stocks)
-            );
-        } catch (JsonProcessingException e) {
+            return new FixIdAssignationStockState(
+                    routerID, brokerID, objectMapper.writeValueAsString(stocks)
+            ).asFix();
+        } catch (JsonProcessingException | MissingRequiredTagException e) {
             throw new RuntimeException(e);
         }
     }

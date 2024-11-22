@@ -95,7 +95,7 @@ public class ExchangeServiceImpl {
         log.info("Exchange service: received message: '{}'", msg);
 
         try { // is it a trading request?
-            FixRequest request = FixResponse.fromFix(msg, new FixRequest());
+            FixRequest request = FixRequest.fromFix(msg, new FixRequest());
             if (!Objects.isNull(assignedId)) {
                 return sendResponse(request);
             } else {

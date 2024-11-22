@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public abstract class FixMessage implements Serializable {
-
+    protected static final int TAG_STOCK_STATE_JSON = 0;
     protected static final int TAG_BEGIN_STRING = 8;
     protected static final int TAG_MSG_TYPE = 35;
     protected static final int TAG_SOURCE_COMP_ID = 49;
