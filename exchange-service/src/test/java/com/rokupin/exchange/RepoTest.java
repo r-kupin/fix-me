@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 public class RepoTest {
 
     @Container
-    static MariaDBContainer<?> mariaDB = new MariaDBContainer<>("mariadb:latest")
+    static final MariaDBContainer<?> mariaDB = new MariaDBContainer<>("mariadb:latest")
             .withCopyFileToContainer(MountableFile
                     .forClasspathResource("testcontainers/create-schema.sql"), "/docker-entrypoint-initdb.d/init.sql");
 

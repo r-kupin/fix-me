@@ -30,7 +30,7 @@ public class TradingServiceImpl implements TradingService {
     private final String host;
     private final int port;
     private final ApplicationEventPublisher publisher;
-    private final AtomicBoolean connectioInProgress;
+    private final AtomicBoolean connectionInProgress;
     private final AtomicBoolean updateRequested;
     // StockId : {Instrument : AmountAvailable}
     private final Map<String, Map<String, Integer>> currentStockState;
@@ -48,7 +48,7 @@ public class TradingServiceImpl implements TradingService {
         this.port = port;
         this.currentStockState = new ConcurrentHashMap<>();
         this.updateRequested = new AtomicBoolean(false);
-        this.connectioInProgress = new AtomicBoolean(false);
+        this.connectionInProgress = new AtomicBoolean(false);
         this.initialStateSink = Sinks.many().replay().all();
     }
 
@@ -69,13 +69,13 @@ public class TradingServiceImpl implements TradingService {
                     connection = null;
                 }).doOnSuccess(conn -> {
                     this.connection = conn;
-                    connectioInProgress.set(false);
+                    connectionInProgress.set(false);
                     log.info("TCPService: Connected successfully to {}:{}", host, port);
                 }).onErrorResume(e -> {
                     initialStateSink.tryEmitNext(
                             "Router service is unavailable. Try to reconnect later.");
                     log.info("TCPService: Connection attempts exhausted. Reporting failure.");
-                    connectioInProgress.set(false);
+                    connectionInProgress.set(false);
                     return Mono.empty();
                 }).subscribe();
     }
@@ -228,7 +228,7 @@ public class TradingServiceImpl implements TradingService {
     @Override
     public void initiateRouterConnection() {
         if (Objects.isNull(connection) &&
-                connectioInProgress.compareAndSet(false, true)) {
+                connectionInProgress.compareAndSet(false, true)) {
             connect();
         }
     }
@@ -278,7 +278,7 @@ public class TradingServiceImpl implements TradingService {
                                     StandardCharsets.UTF_8);
                 }
             } else {
-                if (!connectioInProgress.get()) {
+                if (!connectionInProgress.get()) {
                     initialStateSink = Sinks.many().replay().all();
                     initiateRouterConnection();
                 }

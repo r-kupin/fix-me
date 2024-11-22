@@ -163,10 +163,9 @@ public class FixTradeWebSocketHandlerTest {
                                 System.out.println("WS ClientMock" + clientMockId + ": received : '" + stocksStateMessage + "'");
                                 return Mono.empty();
                             } catch (JsonProcessingException exception) {
-//                                return Mono.error(new AssertionError(
-//                                        "Received message '" + msg +
-//                                                "' was expected to be a valid StocksStateMessage instance"));
-                                return Mono.empty();
+                                return Mono.error(new AssertionError(
+                                        "Received message '" + msg +
+                                                "' was expected to be a valid StocksStateMessage instance"));
                             }
                         }
                     }
@@ -231,7 +230,7 @@ public class FixTradeWebSocketHandlerTest {
             stocks.get(request.getTarget()).replace(request.getInstrument(), after);
             return response;
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println(e.getMessage());
             return null;
         } finally {
             lock.writeLock().unlock();

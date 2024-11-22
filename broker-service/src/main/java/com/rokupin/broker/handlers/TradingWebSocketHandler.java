@@ -98,12 +98,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 ).map(session::textMessage);
     }
 
-    //    class FuncImpl implements Function<Flux<String>, String> {
-//          public Flux<String> apply(String msg) {
-//
-//          }
-//    }
-
     private Flux<WebSocketMessage> handleTradeResponseEvent(WebSocketSession session) {
         return tradeResponseEventFlux
                 .map(EventObject::getSource)
