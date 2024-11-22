@@ -1,4 +1,4 @@
-package com.rokupin.model;
+package com.rokupin.broker.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

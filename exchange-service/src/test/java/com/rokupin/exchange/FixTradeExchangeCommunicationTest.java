@@ -1,8 +1,8 @@
 package com.rokupin.exchange;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,13 +62,17 @@ public class FixTradeExchangeCommunicationTest {
                                                Map<String, Integer> expectedState) {
 
         try {
-            StocksStateMessage state = objectMapper.readValue(payload, StocksStateMessage.class);
-            if (state.getStocks().containsKey(exchangeID) &&
-                    state.getStocks().get(exchangeID).equals(expectedState))
-                return outbound.sendString(Mono.just(makeRequest(exchangeID)), StandardCharsets.UTF_8).then();
+            FixStockStateReport fix = FixMessage.fromFix(payload, new FixStockStateReport());
+            Map<String, Integer> state = objectMapper.readValue(
+                    fix.getStockJson(), new TypeReference<>() {
+                    }
+            );
+            if (fix.getSender().equals(exchangeID) && state.equals(expectedState))
+                return outbound.sendString(Mono.just(makeRequest(exchangeID)),
+                        StandardCharsets.UTF_8).then();
             else
                 return Mono.error(new AssertionError("Stock state message is wrong: " + payload));
-        } catch (JsonProcessingException e) {
+        } catch (MissingRequiredTagException e) {
             try {
                 FixResponse fix = FixMessage.fromFix(payload, new FixResponse());
                 if (fix.getSender().equals(exchangeID) &&
@@ -84,6 +88,8 @@ public class FixTradeExchangeCommunicationTest {
             } catch (MissingRequiredTagException ex) {
                 return Mono.error(new AssertionError("unsupported inbound traffic format: " + payload));
             }
+        } catch (JsonProcessingException e) {
+            return Mono.error(new AssertionError("json map is misconfigured: " + payload));
         }
     }
 

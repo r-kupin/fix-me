@@ -4,11 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.exchange.model.InstrumentEntry;
 import com.rokupin.exchange.repo.StockRepo;
-import com.rokupin.model.StocksStateMessage;
-import com.rokupin.model.fix.FixIdAssignation;
-import com.rokupin.model.fix.FixRequest;
-import com.rokupin.model.fix.FixResponse;
-import com.rokupin.model.fix.MissingRequiredTagException;
+import com.rokupin.model.fix.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -105,7 +100,7 @@ public class ExchangeServiceImpl {
             try { // is it an ID assignation message?
                 FixIdAssignation idMsg = FixIdAssignation.fromFix(msg, new FixIdAssignation());
 
-                if (assignedId.isEmpty()) {
+                if (Objects.isNull(assignedId)) {
                     assignedId = idMsg.getTarget();
                     return sendStateMessage();
                 } else {
@@ -125,18 +120,20 @@ public class ExchangeServiceImpl {
                 .collectMap(InstrumentEntry::name, InstrumentEntry::amount)
                 .flatMap(map -> {
                     try {
-                        // Serialize the map to a JSON string
-                        String jsonState = objectMapper.writeValueAsString(
-                                new StocksStateMessage(Map.of(assignedId, map))
+                        FixStockStateReport fix = new FixStockStateReport(
+                                assignedId,
+                                objectMapper.writeValueAsString(map)
                         );
 
                         // Send the JSON string as a response
                         return connection.outbound()
-                                .sendString(Mono.just(jsonState), StandardCharsets.UTF_8)
+                                .sendString(Mono.just(fix.asFix()), StandardCharsets.UTF_8)
                                 .then(); // Complete the send operation
                     } catch (JsonProcessingException e) {
                         // Handle JSON serialization error
                         return Mono.error(new RuntimeException("Failed to serialize state", e));
+                    } catch (MissingRequiredTagException e) {
+                        return Mono.error(new RuntimeException("Failed make a fix message", e));
                     }
                 });
     }

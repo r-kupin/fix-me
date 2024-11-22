@@ -3,7 +3,7 @@ package com.rokupin.broker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.model.StocksStateMessage;
+import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
