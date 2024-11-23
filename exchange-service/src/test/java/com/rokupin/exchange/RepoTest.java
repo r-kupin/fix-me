@@ -36,8 +36,8 @@ public class RepoTest {
         registry.add("spring.r2dbc.url", () -> "r2dbc:mariadb://"
                 + mariaDB.getHost() + ":" + mariaDB.getFirstMappedPort()
                 + "/" + mariaDB.getDatabaseName());
-        registry.add("spring.r2dbc.username", () -> mariaDB.getUsername());
-        registry.add("spring.r2dbc.password", () -> mariaDB.getPassword());
+        registry.add("spring.r2dbc.username", mariaDB::getUsername);
+        registry.add("spring.r2dbc.password", mariaDB::getPassword);
     }
 
     @Order(1)

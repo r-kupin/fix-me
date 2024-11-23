@@ -20,9 +20,7 @@ import reactor.test.StepVerifier;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -101,25 +99,10 @@ public class FixTradeWebSocketHandlerTest {
                                           Map<String, Map<String, Integer>> stocks,
                                           String brokerID,
                                           NettyOutbound outbound) {
-        return Flux.fromIterable(splitFixMessages(data)) // Split into individual messages
+        return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
                 .flatMap(msg -> processIncomingMessage(
                         msg, stocks, brokerID, outbound
                 )).then();
-    }
-
-    private List<String> splitFixMessages(String messages) {
-        List<String> fixMessages = new ArrayList<>();
-        StringBuilder currentMessage = new StringBuilder();
-        String[] parts = messages.split("\u0001"); // Split by the SOH character
-
-        for (String part : parts) {
-            currentMessage.append(part).append("\u0001"); // Re-add the delimiter
-            if (part.startsWith("10=")) { // Detect the end of a FIX message
-                fixMessages.add(currentMessage.toString());
-                currentMessage.setLength(0); // Reset for the next message
-            }
-        }
-        return fixMessages;
     }
 
     private Mono<Void> processIncomingMessage(String payload,
@@ -128,7 +111,7 @@ public class FixTradeWebSocketHandlerTest {
                                               NettyOutbound outbound) {
         System.out.println("External API mock: received '" + payload + "'");
         try {
-            FixRequest request = FixRequest.fromFix(payload, new FixRequest());
+            FixRequest request = FixMessage.fromFix(payload, new FixRequest());
             if (request.getSender().equals(brokerID)) {
                 String fix = updateMockStock(stocks, request).asFix();
                 System.out.println("External API mock: sending: '" + fix + "'");
@@ -249,14 +232,4 @@ public class FixTradeWebSocketHandlerTest {
         }
     }
 
-    private String serializeStockState(Map<String, Map<String, Integer>> stocks) {
-        lock.readLock().lock();
-        try {
-            return objectMapper.writeValueAsString(stocks);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
 }

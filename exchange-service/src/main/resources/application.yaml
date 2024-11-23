@@ -2,6 +2,12 @@ tcp:
   host: localhost
   port: 5001
 
+server:
+  port: 8082
+  compression:
+    enabled: true
+  address: 0.0.0.0
+
 spring:
   main:
     web-application-type: reactive

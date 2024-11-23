@@ -17,8 +17,6 @@ import reactor.util.retry.Retry;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 @Slf4j
@@ -66,31 +64,16 @@ public class ExchangeServiceImpl {
     private Mono<Void> handleIncomingData(String data) {
         log.info("Exchange service: received data: '{}'", data);
 
-        return Flux.fromIterable(splitFixMessages(data)) // Split into individual messages
+        return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
                 .flatMap(this::handleIncomingMessage) // Process each message individually
                 .then();
-    }
-
-    private List<String> splitFixMessages(String messages) {
-        List<String> fixMessages = new ArrayList<>();
-        StringBuilder currentMessage = new StringBuilder();
-        String[] parts = messages.split("\u0001"); // Split by the SOH character
-
-        for (String part : parts) {
-            currentMessage.append(part).append("\u0001"); // Re-add the delimiter
-            if (part.startsWith("10=")) { // Detect the end of a FIX message
-                fixMessages.add(currentMessage.toString());
-                currentMessage.setLength(0); // Reset for the next message
-            }
-        }
-        return fixMessages;
     }
 
     private Mono<Void> handleIncomingMessage(String msg) {
         log.info("Exchange service: received message: '{}'", msg);
 
         try { // is it a trading request?
-            FixRequest request = FixRequest.fromFix(msg, new FixRequest());
+            FixRequest request = FixMessage.fromFix(msg, new FixRequest());
             if (!Objects.isNull(assignedId)) {
                 return sendResponse(request);
             } else {
@@ -98,7 +81,7 @@ public class ExchangeServiceImpl {
             }
         } catch (MissingRequiredTagException e) {
             try { // is it an ID assignation message?
-                FixIdAssignation idMsg = FixIdAssignation.fromFix(msg, new FixIdAssignation());
+                FixIdAssignation idMsg = FixMessage.fromFix(msg, new FixIdAssignation());
 
                 if (Objects.isNull(assignedId)) {
                     assignedId = idMsg.getTarget();

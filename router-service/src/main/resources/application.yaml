@@ -1,0 +1,19 @@
+router:
+  id: R0000
+  tcp:
+    broker:
+      host: localhost
+      port: 5000
+    exchange:
+      host: localhost
+      port: 5001
+
+server:
+  port: 8083
+  compression:
+    enabled: true
+  address: 0.0.0.0
+
+spring:
+  main:
+    web-application-type: reactive

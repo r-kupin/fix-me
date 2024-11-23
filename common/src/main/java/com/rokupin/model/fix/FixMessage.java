@@ -1,11 +1,8 @@
 package com.rokupin.model.fix;
 
-
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class FixMessage implements Serializable {
@@ -70,5 +67,20 @@ public abstract class FixMessage implements Serializable {
             sum += b;
         }
         return sum % 256;
+    }
+
+    public static List<String> splitFixMessages(String messages) {
+        List<String> fixMessages = new ArrayList<>();
+        StringBuilder currentMessage = new StringBuilder();
+        String[] parts = messages.split("\u0001"); // Split by the SOH character
+
+        for (String part : parts) {
+            currentMessage.append(part).append("\u0001"); // Re-add the delimiter
+            if (part.startsWith("10=")) { // Detect the end of a FIX message
+                fixMessages.add(currentMessage.toString());
+                currentMessage.setLength(0); // Reset for the next message
+            }
+        }
+        return fixMessages;
     }
 }

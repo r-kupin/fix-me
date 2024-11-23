@@ -13,9 +13,11 @@
     <artifactId>router-service</artifactId>
 
     <dependencies>
-        <!-- Router-specific dependencies -->
-
-        <!-- Netty (Reactor Netty already in parent) -->
-        <!-- Additional dependencies can be added here -->
+        <!-- Core -->
+        <dependency>
+            <groupId>com.rokupin</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 </project>

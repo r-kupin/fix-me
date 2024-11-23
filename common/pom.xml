@@ -10,7 +10,7 @@
         <relativePath>../pom.xml</relativePath> <!-- Path to parent POM -->
     </parent>
 
-    <artifactId>core</artifactId>
+    <artifactId>common</artifactId>
 
     <dependencies>
     </dependencies>
