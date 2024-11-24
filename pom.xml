@@ -13,14 +13,16 @@
         <module>router-service</module>
         <module>exchange-service</module>
         <module>client-service</module>
+        <module>eureka-server</module>
         <module>common</module>
     </modules>
 
     <!-- Shared properties -->
     <properties>
         <java.version>21</java.version>
-        <spring-boot.version>3.3.3</spring-boot.version>
+        <spring-boot.version>3.2.12</spring-boot.version>
         <reactor-netty.version>1.1.7</reactor-netty.version>
+        <spring-cloud.version>2023.0.2</spring-cloud.version>
 
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -34,6 +36,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>

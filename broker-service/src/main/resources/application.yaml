@@ -9,8 +9,16 @@ server:
   address: 0.0.0.0
 
 spring:
+  application:
+    name: broker-service
   main:
     web-application-type: reactive
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/ # Eureka server URL
+
 
 #logging:
 #  pattern:
