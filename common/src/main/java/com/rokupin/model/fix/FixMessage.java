@@ -60,6 +60,16 @@ public abstract class FixMessage implements Serializable {
         stringBuilder.append(tag).append("=").append(value).append("\u0001");
     }
 
+    protected int getSide(String action) throws MissingRequiredTagException {
+        return switch (action) {
+            case "buy" -> 1;
+            case "sell" -> 2;
+            default -> throw new MissingRequiredTagException(
+                    "Side parameter should be either 'buy' or 'sell' but '" +
+                            action + "' provided");
+        };
+    }
+
     private int calculateChecksum(String message) {
         byte[] bytes = message.getBytes(StandardCharsets.US_ASCII);
         int sum = 0;

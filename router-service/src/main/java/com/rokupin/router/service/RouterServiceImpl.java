@@ -153,7 +153,7 @@ public class RouterServiceImpl {
                         "instrument: {}", id, instrument);
             } else {
                 int before = stock.get(instrument);
-                int after = response.getAction().equals("buy") ?
+                int after = response.getAction() == 1 ?
                         before - response.getAmount() : before + response.getAmount();
                 if (after < 0) {
                     log.warn("Remaining instrument amount can't be negative." +

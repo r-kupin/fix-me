@@ -20,13 +20,13 @@ public class FixRequest extends FixMessage {
     private String senderSubId; // SenderSubId (50)
     private String target;      // TargetCompID (56)
     private String instrument;  // Symbol (55)
-    private String action;      // Side (54) - 1 = Buy, 2 = Sell
+    private int action;         // Side (54) - 1 = Buy, 2 = Sell
     private int amount;         // OrderQty (38)
 
-    public FixRequest(ClientTradingRequest clientMsg) {
+    public FixRequest(ClientTradingRequest clientMsg) throws MissingRequiredTagException {
         this.target = clientMsg.getTarget();
         this.instrument = clientMsg.getInstrument();
-        this.action = clientMsg.getAction();
+        this.action = getSide(clientMsg.getAction());
         this.amount = clientMsg.getAmount();
     }
 
@@ -36,7 +36,7 @@ public class FixRequest extends FixMessage {
         this.senderSubId = fixFields.get(TAG_SOURCE_SUB_ID);
         this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
         this.instrument = getRequiredField(fixFields, TAG_SYMBOL);
-        this.action = fixFields.get(TAG_SIDE);
+        this.action = Integer.parseInt(getRequiredField(fixFields, TAG_SIDE));
         this.amount = Integer.parseInt(getRequiredField(fixFields, TAG_ORDER_QTY));
     }
 
@@ -46,7 +46,7 @@ public class FixRequest extends FixMessage {
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_SOURCE_SUB_ID, senderSubId);
         appendTag(fixMessage, TAG_SYMBOL, instrument);
-        appendTag(fixMessage, TAG_SIDE, action);
+        appendTag(fixMessage, TAG_SIDE, String.valueOf(action));
         appendTag(fixMessage, TAG_ORDER_QTY, String.valueOf(amount));
         appendTag(fixMessage, TAG_TARGET_COMP_ID, String.valueOf(target));
     }

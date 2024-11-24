@@ -193,7 +193,7 @@ public class TradingServiceImpl implements TradingService {
             }
 
             int before = stock.get(instrument);
-            int after = response.getAction().equals("buy") ?
+            int after = response.getAction() == 1 ?
                     before - response.getAmount() : before + response.getAmount();
             if (after < 0) {
                 log.warn("Remaining instrument amount can't be negative." +
@@ -230,6 +230,9 @@ public class TradingServiceImpl implements TradingService {
                 if (assignedId.isEmpty())
                     return Mono.just("Trading request not sent:" +
                             " this broker service has no assigned ID");
+                if (!currentStockState.containsKey(tradeRequest.getTarget()))
+                    return Mono.just("Trading request not sent:" +
+                            " unknown destination");
                 tradeRequest.setSender(assignedId);
                 String fix = tradeRequest.asFix();
                 log.info("TCPService: sending message '{}'", fix);

@@ -27,7 +27,7 @@ public class FixResponse extends FixMessage {
     private String target;      // TargetCompID (56)    >> assigned ID
     private String targetSubId; // TargetSubID (57)     >> WS session ID
     private String instrument;  // Symbol (55)
-    private String action;      // Side (54) - 1 = Buy, 2 = Sell
+    private int action;         // Side (54) - 1 = Buy, 2 = Sell
     private int amount;         // OrderQty (38)
     private int ordStatus;      // OrdStatus (39) - 0 = New, 2 = Filled, 8 = Rejected
 
@@ -37,7 +37,7 @@ public class FixResponse extends FixMessage {
         this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
         this.targetSubId = getRequiredField(fixFields, TAG_TARGET_SUB_ID);
         this.instrument = getRequiredField(fixFields, TAG_SYMBOL);
-        this.action = fixFields.get(TAG_SIDE);
+        this.action = Integer.parseInt(getRequiredField(fixFields, TAG_SIDE));
         this.amount = Integer.parseInt(getRequiredField(fixFields, TAG_ORDER_QTY));
         this.ordStatus = Integer.parseInt(getRequiredField(fixFields, TAG_ORD_STATUS));
     }
@@ -49,7 +49,7 @@ public class FixResponse extends FixMessage {
         appendTag(fixMessage, TAG_TARGET_COMP_ID, target);
         appendTag(fixMessage, TAG_TARGET_SUB_ID, targetSubId);
         appendTag(fixMessage, TAG_SYMBOL, instrument);
-        appendTag(fixMessage, TAG_SIDE, action);
+        appendTag(fixMessage, TAG_SIDE, String.valueOf(action));
         appendTag(fixMessage, TAG_ORDER_QTY, String.valueOf(amount));
         appendTag(fixMessage, TAG_ORD_STATUS, String.valueOf(ordStatus));
     }

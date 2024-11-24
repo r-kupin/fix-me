@@ -79,7 +79,7 @@ public class FixTradeExchangeCommunicationTest {
                         fix.getTarget().equals("B00000") &&
                         fix.getTargetSubId().equals("1") &&
                         fix.getInstrument().equals("TEST1") &&
-                        fix.getAction().equals("1") &&
+                        fix.getAction() == 1 &&
                         fix.getAmount() == 1 &&
                         fix.getOrdStatus() == 2)
                     return Mono.empty();
@@ -100,7 +100,7 @@ public class FixTradeExchangeCommunicationTest {
                     "1",
                     exchangeId,
                     "TEST1",
-                    "1",
+                    1,
                     1).asFix();
         } catch (MissingRequiredTagException e) {
             throw new RuntimeException(e);

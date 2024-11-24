@@ -6,9 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.InputEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.broker.service.TradingService;
-import com.rokupin.model.fix.ClientTradingRequest;
-import com.rokupin.model.fix.FixRequest;
-import com.rokupin.model.fix.FixResponse;
+import com.rokupin.model.fix.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -102,20 +100,11 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         return tradeResponseEventFlux
                 .map(EventObject::getSource)
                 .flatMap(msg -> {
-                    if (msg instanceof FixResponse response) {
-                        if (response.getTargetSubId().equals(session.getId())) {
+                    if (msg instanceof FixResponse fixResponse) {
+                        if (fixResponse.getTargetSubId().equals(session.getId())) {
                             log.info("WSHandler [{}]: processing trading " +
                                     "response event '{}'", session.getId(), msg);
-                            try {
-                                String responseJson = objectMapper.writeValueAsString(response);
-                                log.info("WSHandler [{}]: sending a trade " +
-                                        "response: '{}'", session.getId(), responseJson);
-                                return Mono.just(responseJson).map(session::textMessage);
-                            } catch (JsonProcessingException e) {
-                                log.warn("WSHandler [{}]: trade response event: '{}' can't be " +
-                                        "serialized to JSON", session.getId(), response);
-                                return Flux.empty();
-                            }
+                            return fixToClientResponse(session, fixResponse);
                         } else {
                             return Flux.empty();
                         }
@@ -125,6 +114,29 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                         return Flux.empty();
                     }
                 });
+    }
+
+    private Mono<WebSocketMessage> fixToClientResponse(WebSocketSession session,
+                                                       FixResponse fixResponse) {
+        try {
+            ClientTradingResponse response = new ClientTradingResponse(fixResponse);
+            try {
+                String jsonResponse = objectMapper.writeValueAsString(response);
+                log.info("WSHandler [{}]: sending a trade " +
+                        "response: '{}'", session.getId(), jsonResponse);
+                return Mono.just(jsonResponse).map(session::textMessage);
+            } catch (JsonProcessingException e) {
+                log.warn("WSHandler [{}]: response: '{}' can't be " +
+                                "serialized to JSON:'{}'",
+                        session.getId(), response, e.getMessage());
+                return Mono.empty();
+            }
+        } catch (MissingRequiredTagException e) {
+            log.warn("WSHandler [{}]: Fix trading response: '{}' can't be " +
+                            "converted to the ClientResponse:'{}'",
+                    session.getId(), fixResponse, e.getMessage());
+            return Mono.empty();
+        }
     }
 
     private Flux<WebSocketMessage> handleStateUpdateEvent(WebSocketSession session) {
@@ -175,6 +187,12 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                                 session.getId(), e.toString());
                         response_msg = Mono.just("Trading request not sent:" +
                                 " JSON syntax is incorrect");
+                    } catch (MissingRequiredTagException e) {
+                        log.warn("WSHandler [{}]: Fix Request creation failed : {}",
+                                session.getId(), e.toString());
+                        response_msg = Mono.just("Trading request not sent:" +
+                                " provided input can't be converted to the Fix Request '" +
+                                e.getMessage() + "'");
                     }
                     return response_msg.map(session::textMessage);
                 });

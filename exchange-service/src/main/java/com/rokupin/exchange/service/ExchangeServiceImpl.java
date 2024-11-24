@@ -139,22 +139,22 @@ public class ExchangeServiceImpl {
     }
 
     public Mono<FixResponse> processTradeRequest(FixRequest request) {
+        FixResponse response = new FixResponse(
+                assignedId,                 // sender
+                request.getSender(),        // receiving service id
+                request.getSenderSubId(),   // receiving client id
+                request.getInstrument(),
+                request.getAction(),
+                request.getAmount(),
+                FixResponse.MSG_ORD_FILLED
+        );
         return stockRepo.findByName(request.getInstrument())
                 .flatMap(entry -> {
-                    FixResponse response = new FixResponse(
-                            assignedId,                 // sender
-                            request.getSender(),        // receiving service id
-                            request.getSenderSubId(),   // receiving client id
-                            request.getInstrument(),
-                            request.getAction(),
-                            request.getAmount(),
-                            FixResponse.MSG_ORD_FILLED
-                    );
-                    if (entry.amount() >= request.getAmount() && request.getAction().equals("1")) {
+                    if (request.getAction() == 1 && entry.amount() >= request.getAmount()) {
                         // Update stock amount if buy action and sufficient quantity exists
                         return updateStockQuantity(entry, entry.amount() - request.getAmount())
                                 .thenReturn(response);
-                    } else if (request.getAction().equals("2")) {
+                    } else if (request.getAction() == 2) {
                         // Update stock amount for a sell action (increasing stock quantity)
                         return updateStockQuantity(entry, entry.amount() + request.getAmount())
                                 .thenReturn(response);
@@ -163,7 +163,11 @@ public class ExchangeServiceImpl {
                         response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
                         return Mono.just(response);
                     }
-                });
+                }).switchIfEmpty(Mono.defer(() -> {
+                    // Instrument not found
+                    response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                    return Mono.just(response);
+                }));
     }
 
     private Mono<InstrumentEntry> updateStockQuantity(InstrumentEntry entry, int updatedAmount) {

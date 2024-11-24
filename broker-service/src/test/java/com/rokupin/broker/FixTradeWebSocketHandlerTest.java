@@ -185,13 +185,15 @@ public class FixTradeWebSocketHandlerTest {
         return requestJson;
     }
 
-    private FixResponse updateMockStock(Map<String, Map<String, Integer>> stocks, FixRequest request) {
+    private FixResponse updateMockStock(Map<String,
+            Map<String, Integer>> stocks,
+                                        FixRequest request) {
         lock.writeLock().lock();
         try {
             String instrument = request.getInstrument();
 
             int before = stocks.get(request.getTarget()).get(instrument);
-            int after = request.getAction().equals("buy") ?
+            int after = request.getAction() == 1 ?
                     before - request.getAmount() : before + request.getAmount();
             FixResponse response = new FixResponse(
                     request.getTarget(),
@@ -231,5 +233,4 @@ public class FixTradeWebSocketHandlerTest {
             throw new RuntimeException(e);
         }
     }
-
 }
