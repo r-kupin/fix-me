@@ -12,7 +12,6 @@
         <module>broker-service</module>
         <module>router-service</module>
         <module>exchange-service</module>
-        <module>client-service</module>
         <module>eureka-server</module>
         <module>gateway-service</module>
         <module>common</module>
