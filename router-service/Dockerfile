@@ -1,11 +1,8 @@
-FROM openjdk:21-alpine
+FROM eclipse-temurin:21
 
-WORKDIR /app
+RUN mkdir /opt/app
+COPY target/* /opt/app
 
-RUN apk add --no-cache bash curl
+EXPOSE 5001 5000
 
-COPY target/router-service-*.jar router-service.jar
-
-EXPOSE 5000 5001
-
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/router-service.jar"]
+CMD ["java", "-jar", "/opt/app/router-service-1.0-SNAPSHOT.jar"]

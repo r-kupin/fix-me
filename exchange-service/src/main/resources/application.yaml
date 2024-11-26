@@ -20,8 +20,13 @@ spring:
 
 eureka:
   client:
+    initial-instance-info-replication-interval-seconds: 30
+    registry-fetch-interval-seconds: 30
     service-url:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
+  instance:
+    lease-renewal-interval-in-seconds: 10                  # Renew lease every 10 seconds
+    lease-expiration-duration-in-seconds: 90
 
 #logging:
 #  pattern:

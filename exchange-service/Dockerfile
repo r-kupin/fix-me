@@ -1,11 +1,8 @@
-FROM openjdk:21-alpine
+FROM eclipse-temurin:21
 
-WORKDIR /app
-
-RUN apk add --no-cache bash curl
-
-COPY target/exchange-service-*.jar exchange-service.jar
+RUN mkdir /opt/app
+COPY target/* /opt/app
 
 EXPOSE 5001
 
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/exchange-service.jar"]
+CMD ["java", "-jar", "/opt/app/exchange-service-1.0-SNAPSHOT.jar"]

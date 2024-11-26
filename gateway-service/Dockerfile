@@ -1,11 +1,8 @@
-FROM openjdk:21-alpine
+FROM eclipse-temurin:21
 
-WORKDIR /app
-
-RUN apk add --no-cache bash curl
-
-COPY target/gateway-service-*.jar gateway-service.jar
+RUN mkdir /opt/app
+COPY target/* /opt/app
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/gateway-service.jar"]
+CMD ["java", "-jar", "/opt/app/gateway-service-1.0-SNAPSHOT.jar"]

@@ -14,5 +14,7 @@ if [ ! -d "/var/lib/mysql/${DB_DEFAULT_NAME}" ]; then
         CREATE USER '${DB_DEFAULT_USERNAME}'@'%' IDENTIFIED BY '${DB_DEFAULT_PASSWORD}';
         GRANT ALL PRIVILEGES ON ${DB_DEFAULT_NAME}.* TO '${DB_DEFAULT_USERNAME}'@'%';
         FLUSH PRIVILEGES;
+
+        USE
 EOSQL
 fi

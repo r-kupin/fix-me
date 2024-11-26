@@ -34,8 +34,8 @@ services:
       - fix-me-network
     deploy:
       replicas: 1
-      restart_policy:
-        condition: on-failure
+  #      restart_policy:
+  #        condition: on-failure
 
   router-service:
     build:

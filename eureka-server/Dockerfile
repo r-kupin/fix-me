@@ -1,11 +1,8 @@
-FROM openjdk:21-alpine
+FROM eclipse-temurin:21
 
-WORKDIR /app
-
-RUN apk add --no-cache bash curl
-
-COPY target/eureka-server-*.jar eureka-server.jar
+RUN mkdir /opt/app
+COPY target/* /opt/app
 
 EXPOSE 8761
 
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/eureka-server.jar"]
+CMD ["java", "-jar", "/opt/app/eureka-server-1.0-SNAPSHOT.jar"]
