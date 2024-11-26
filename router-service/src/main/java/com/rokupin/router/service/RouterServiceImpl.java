@@ -91,6 +91,7 @@ public class RouterServiceImpl {
             String newId = "E" + String.format("%05d", exchanges++);
             FixIdAssignation msg = new FixIdAssignation(id, newId);
             exchangeConnections.put(newId, connection);
+            log.debug("New exchange '{}' connected", newId);
             return Mono.just(msg.asFix());
         } catch (MissingRequiredTagException e) {
             log.error("Router service: Cant make an exchange welcome string: {}",
@@ -100,6 +101,7 @@ public class RouterServiceImpl {
     }
 
     private Mono<Void> handleExchangeInput(String input) {
+        log.debug("Received '{}' from exchange", input);
         try {
             FixStockStateReport stockState = FixMessage.fromFix(input, new FixStockStateReport());
             Map<String, Integer> state = objectMapper.readValue(
@@ -110,22 +112,46 @@ public class RouterServiceImpl {
                     stateCache.replace(stockState.getSender(), state);
                 else
                     stateCache.putIfAbsent(stockState.getSender(), state);
-                String broadcastMessage = new FixStockStateReport(id, objectMapper.writeValueAsString(stateCache)).asFix();
-                return Flux.fromIterable(brokerConnections.values())
-                        .flatMap(connection -> connection.outbound()
-                                .sendString(Mono.just(broadcastMessage), StandardCharsets.UTF_8)
-                                .then())
-                        .then();
+                String broadcastMessage = new FixStockStateReport(
+                        id, objectMapper.writeValueAsString(stateCache)
+                ).asFix();
+                return Flux.fromIterable(brokerConnections.entrySet())
+                        .flatMap(entry -> {
+                            log.debug("Sending state to {}", entry.getKey());
+                            Connection connection = entry.getValue();
+                            return connection.outbound()
+                                    .sendString(Mono.just(broadcastMessage), StandardCharsets.UTF_8)
+                                    .then();
+                        }).then();
             }
         } catch (MissingRequiredTagException e) {
             try {
                 FixResponse response = FixMessage.fromFix(input, new FixResponse());
-                updateState(response);
+                boolean stateModified = updateState(response);
                 Connection brokerConnection = brokerConnections.get(response.getTarget());
                 if (Objects.nonNull(brokerConnection)) {
-                    return brokerConnection.outbound()
-                            .sendString(Mono.just(input), StandardCharsets.UTF_8)
-                            .then();
+                    log.debug("Sending trading response to '{}'", response.getTarget());
+                    if (stateModified) {
+                        String broadcastMessage = new FixStockStateReport(
+                                id, objectMapper.writeValueAsString(stateCache)
+                        ).asFix();
+                        return Flux.concat(
+                                Flux.fromIterable(brokerConnections.entrySet())
+                                        .filter(entry -> !entry.getKey().equals(response.getTarget()))
+                                        .flatMap(entry -> {
+                                            log.debug("Sending state to {}", entry.getKey());
+                                            Connection connection = entry.getValue();
+                                            return connection.outbound()
+                                                    .sendString(Mono.just(broadcastMessage), StandardCharsets.UTF_8)
+                                                    .then();
+                                        }),
+                                brokerConnection.outbound()
+                                        .sendString(Mono.just(input), StandardCharsets.UTF_8)).then();
+                    } else {
+                        return brokerConnection.outbound()
+                                .sendString(Mono.just(input), StandardCharsets.UTF_8)
+                                .then();
+                    }
                 } else {
                     log.warn("Target broker {} not connected for trading response",
                             response.getTarget());
@@ -133,6 +159,8 @@ public class RouterServiceImpl {
             } catch (MissingRequiredTagException ex) {
                 log.error("Router service: unsupported inbound traffic format: {}",
                         ex.getMessage());
+            } catch (JsonProcessingException ex) {
+                log.error("Router service: json map is misconfigured");
             }
         } catch (JsonProcessingException e) {
             log.error("Router service: json map is misconfigured");
@@ -140,7 +168,7 @@ public class RouterServiceImpl {
         return Mono.empty();
     }
 
-    private void updateState(FixResponse response) {
+    private boolean updateState(FixResponse response) {
         String id = response.getSender();
 
         if (!stateCache.containsKey(id)) {
@@ -161,9 +189,11 @@ public class RouterServiceImpl {
                             response, before);
                 } else {
                     stock.replace(instrument, after);
+                    return true;
                 }
             }
         }
+        return false;
     }
 
     private Mono<String> welcomeNewBroker(Connection connection) {
