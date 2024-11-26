@@ -54,32 +54,32 @@ public class ExchangeServiceImpl {
     }
 
     private Retry retrySpec() {
-        return Retry.backoff(5, Duration.ofSeconds(2)) // Retry up to 5 times with exponential backoff
-                .maxBackoff(Duration.ofSeconds(10))   // Cap delay at 10 seconds
-                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
+        return Retry.backoff(5, Duration.ofSeconds(2))
+                .maxBackoff(Duration.ofSeconds(10))
+                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}",
+                        signal.totalRetriesInARow() + 1))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
                         new RuntimeException("Max retry attempts reached."));
     }
 
     private Mono<Void> handleIncomingData(String data) {
-        log.info("Exchange service: received data: '{}'", data);
-
-        return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
-                .flatMap(this::handleIncomingMessage) // Process each message individually
+        return Flux.fromIterable(FixMessage.splitFixMessages(data))
+                .flatMap(this::handleIncomingMessage)
                 .then();
     }
 
     private Mono<Void> handleIncomingMessage(String msg) {
-        log.info("Exchange service: received message: '{}'", msg);
+        log.debug("Received message: '{}'", msg);
 
         try { // is it a trading request?
             FixRequest request = FixMessage.fromFix(msg, new FixRequest());
+            log.debug("Processing trading request");
             if (!Objects.isNull(assignedId)) {
                 return sendResponse(request);
             } else {
-                log.warn("Exchange service: received trading request before ID was assigned");
+                log.warn("Received trading request before ID was assigned");
             }
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             try { // is it an ID assignation message?
                 FixIdAssignation idMsg = FixMessage.fromFix(msg, new FixIdAssignation());
 
@@ -87,13 +87,13 @@ public class ExchangeServiceImpl {
                     assignedId = idMsg.getTarget();
                     return sendStateMessage();
                 } else {
-                    log.warn("Exchange service: ID re-assignation operation!");
+                    log.warn("Re-assignation of the ID");
                 }
-            } catch (MissingRequiredTagException ex) {
-                log.warn("Exchange service: received message is not supported. Ignoring.");
+            } catch (FixMessageMisconfiguredException ex) {
+                log.warn("Received message is not supported. Ignoring.");
             }
         } catch (IllegalStateException e) {
-            log.warn("Exchange service: received message is not valid FIX request");
+            log.warn("Received message is not valid FIX request");
         }
         return Mono.empty();
     }
@@ -103,19 +103,17 @@ public class ExchangeServiceImpl {
                 .collectMap(InstrumentEntry::name, InstrumentEntry::amount)
                 .flatMap(map -> {
                     try {
-                        FixStockStateReport fix = new FixStockStateReport(
+                        String stateReport = new FixStockStateReport(
                                 assignedId,
                                 objectMapper.writeValueAsString(map)
-                        );
-
-                        // Send the JSON string as a response
+                        ).asFix();
+                        log.debug("Sendind state report: {}", stateReport);
                         return connection.outbound()
-                                .sendString(Mono.just(fix.asFix()), StandardCharsets.UTF_8)
-                                .then(); // Complete the send operation
+                                .sendString(Mono.just(stateReport), StandardCharsets.UTF_8)
+                                .then();
                     } catch (JsonProcessingException e) {
-                        // Handle JSON serialization error
                         return Mono.error(new RuntimeException("Failed to serialize state", e));
-                    } catch (MissingRequiredTagException e) {
+                    } catch (FixMessageMisconfiguredException e) {
                         return Mono.error(new RuntimeException("Failed make a fix message", e));
                     }
                 });
@@ -125,12 +123,13 @@ public class ExchangeServiceImpl {
         return processTradeRequest(request)
                 .flatMap(response -> {
                     try {
+                        log.debug("Sending response: {}", response.asFix());
                         return connection.outbound()
                                 .sendString(Mono.just(response.asFix()),
                                         StandardCharsets.UTF_8)
                                 .then();
-                    } catch (MissingRequiredTagException e) {
-                        log.error("Exchange service: response assembly failed. This can't happen.");
+                    } catch (FixMessageMisconfiguredException e) {
+                        log.error("Response assembly failed. This can't happen.");
                         return Mono.empty();
                     }
                 })

@@ -32,7 +32,7 @@ public class FixResponse extends FixMessage {
     private int ordStatus;      // OrdStatus (39) - 0 = New, 2 = Filled, 8 = Rejected
 
     @Override
-    protected void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException {
+    protected void parseFields(Map<Integer, String> fixFields) throws FixMessageMisconfiguredException {
         this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
         this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
         this.targetSubId = getRequiredField(fixFields, TAG_TARGET_SUB_ID);
@@ -43,7 +43,7 @@ public class FixResponse extends FixMessage {
     }
 
     @Override
-    protected void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException {
+    protected void appendFields(StringBuilder fixMessage) throws FixMessageMisconfiguredException {
         appendTag(fixMessage, TAG_MSG_TYPE, MSG_EXECUTION_REPORT);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_TARGET_COMP_ID, target);
@@ -52,5 +52,21 @@ public class FixResponse extends FixMessage {
         appendTag(fixMessage, TAG_SIDE, String.valueOf(action));
         appendTag(fixMessage, TAG_ORDER_QTY, String.valueOf(amount));
         appendTag(fixMessage, TAG_ORD_STATUS, String.valueOf(ordStatus));
+    }
+
+    @Override
+    protected void validate() throws FixMessageMisconfiguredException {
+        if (action != 1 && action != 2)
+            throw new FixMessageMisconfiguredException(
+                    "Side (54) should be 1 (Buy) or 2 (Sell). Provided: '" +
+                            action + "'");
+        if (amount < 1)
+            throw new FixMessageMisconfiguredException(
+                    "OrderQty (38) should be a positive integer. Provided: '" +
+                            amount + "'");
+        if (ordStatus != 0 && ordStatus != 2 && ordStatus != 8)
+            throw new FixMessageMisconfiguredException(
+                    "OrdStatus (39) should be 0 (New), 2 (Filled) or 8 (Rejected)." +
+                            " Provided: '" + ordStatus + "'");
     }
 }

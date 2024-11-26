@@ -28,12 +28,6 @@ eureka:
     lease-renewal-interval-in-seconds: 10                  # Renew lease every 10 seconds
     lease-expiration-duration-in-seconds: 90
 
-#logging:
-#  pattern:
-#    console: "%-5level: %class{0} - %msg%n"
-#  level:
-#    root: INFO
-#    org.springframework: INFO
-#    org.springframework.boot: DEBUG
-#    org.springframework.data.r2dbc: DEBUG
-#    com.apress.prospring6.twenty: DEBUG
+logging:
+  level:
+    com.rokupin.exchange: DEBUG

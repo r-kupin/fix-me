@@ -16,7 +16,7 @@ public abstract class FixMessage implements Serializable {
     protected static final int TAG_ORDER_QTY = 38;
     protected static final int TAG_TARGET_COMP_ID = 56;
 
-    public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws MissingRequiredTagException {
+    public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws FixMessageMisconfiguredException {
         Map<Integer, String> fixFields = Arrays.stream(fixMessage.split("\u0001"))
                 .map(part -> part.split("=", 2))
                 .filter(pair -> pair.length == 2)
@@ -26,22 +26,26 @@ public abstract class FixMessage implements Serializable {
                 ));
 
         message.parseFields(fixFields);
+        message.validate();
         return message;
     }
 
     protected static String getRequiredField(Map<Integer, String> fields,
-                                             int tag) throws MissingRequiredTagException {
+                                             int tag) throws FixMessageMisconfiguredException {
         return Optional.ofNullable(fields.get(tag))
                 .orElseThrow(() ->
-                        new MissingRequiredTagException("Missing required tag: " + tag)
+                        new FixMessageMisconfiguredException("Missing required tag: " + tag)
                 );
     }
 
-    protected abstract void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException;
+    protected abstract void parseFields(Map<Integer, String> fixFields) throws FixMessageMisconfiguredException;
 
-    protected abstract void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException;
+    protected abstract void appendFields(StringBuilder fixMessage) throws FixMessageMisconfiguredException;
 
-    public String asFix() throws MissingRequiredTagException {
+    protected void validate() throws FixMessageMisconfiguredException {
+    }
+
+    public String asFix() throws FixMessageMisconfiguredException {
         StringBuilder fixMessage = new StringBuilder();
 
         appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
@@ -54,19 +58,19 @@ public abstract class FixMessage implements Serializable {
         return fixMessage.toString();
     }
 
-    protected void appendTag(StringBuilder stringBuilder, int tag, String value) throws MissingRequiredTagException {
+    protected void appendTag(StringBuilder stringBuilder, int tag, String value) throws FixMessageMisconfiguredException {
         if (value.isEmpty())
-            throw new MissingRequiredTagException("Missing value for tag: " + tag);
+            throw new FixMessageMisconfiguredException("Missing value for tag: " + tag);
         stringBuilder.append(tag).append("=").append(value).append("\u0001");
     }
 
-    protected int getSide(String action) throws MissingRequiredTagException {
+    protected int getSide(String action) throws FixMessageMisconfiguredException {
         return switch (action) {
             case "buy" -> 1;
             case "sell" -> 2;
-            default -> throw new MissingRequiredTagException(
-                    "Side parameter should be either 'buy' or 'sell' but '" +
-                            action + "' provided");
+            default -> throw new FixMessageMisconfiguredException(
+                    "Side (54) should be 1 (Buy) or 2 (Sell). Provided: '" +
+                            action + "'");
         };
     }
 

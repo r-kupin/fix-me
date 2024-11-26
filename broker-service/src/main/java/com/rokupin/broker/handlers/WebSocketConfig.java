@@ -23,12 +23,6 @@ public class WebSocketConfig {
         this.tradingWebSocketHandler = tradingWebSocketHandler;
     }
 
-//    @Bean
-//    @Primary
-//    public RequestUpgradeStrategy requestUpgradeStrategy() {
-//        return new ReactorNettyRequestUpgradeStrategy();
-//    }
-
     @Bean
     WebSocketHandlerAdapter webSocketHandlerAdapter() {
         return new WebSocketHandlerAdapter();

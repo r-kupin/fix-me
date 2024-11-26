@@ -118,7 +118,7 @@ public class FixTradeWebSocketHandlerTest {
                 return outbound.sendString(Mono.just(fix), StandardCharsets.UTF_8).then();
             }
             return Mono.error(new AssertionError("Received message is not supported"));
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             return Mono.error(new AssertionError("Received message is not supported"));
         }
     }
@@ -229,7 +229,7 @@ public class FixTradeWebSocketHandlerTest {
             return new FixIdAssignationStockState(
                     routerID, brokerID, objectMapper.writeValueAsString(stocks)
             ).asFix();
-        } catch (JsonProcessingException | MissingRequiredTagException e) {
+        } catch (JsonProcessingException | FixMessageMisconfiguredException e) {
             throw new RuntimeException(e);
         }
     }

@@ -16,7 +16,7 @@ public class ClientTradingResponse {
     private String ordStatus;
     private int amount;
 
-    public ClientTradingResponse(FixResponse fix) throws MissingRequiredTagException {
+    public ClientTradingResponse(FixResponse fix) throws FixMessageMisconfiguredException {
         this.sender = fix.getSender();
         this.instrument = fix.getInstrument();
         this.amount = fix.getAmount();
@@ -24,14 +24,14 @@ public class ClientTradingResponse {
             case 0 -> "new";
             case 2 -> "filled";
             case 8 -> "rejected";
-            default -> throw new MissingRequiredTagException(
+            default -> throw new FixMessageMisconfiguredException(
                     "OrderStatus parameter should be either '0', '8' or '2' but '" +
                             fix.getOrdStatus() + "' provided");
         };
         this.action = switch (fix.getAction()) {
             case 1 -> "buy";
             case 2 -> "sell";
-            default -> throw new MissingRequiredTagException(
+            default -> throw new FixMessageMisconfiguredException(
                     "Side parameter should be either '1' or '2' but '" +
                             fix.getAction() + "' provided");
         };

@@ -67,7 +67,7 @@ public class TradingServiceImpl implements TradingService {
                 ).connect()
                 .retryWhen(retrySpec())
                 .doOnError(e -> {
-                    log.info("TCPService: Connection failed: {}", e.getMessage());
+                    log.warn("TCPService: Connection failed: {}", e.getMessage());
                     connection = null;
                 }).doOnSuccess(conn -> {
                     this.connection = conn;
@@ -76,7 +76,7 @@ public class TradingServiceImpl implements TradingService {
                 }).onErrorResume(e -> {
                     initialStateSink.tryEmitNext(
                             "Router service is unavailable. Try to reconnect later.");
-                    log.info("TCPService: Connection attempts exhausted. Reporting failure.");
+                    log.error("TCPService: Connection attempts exhausted. Reporting failure.");
                     connectionInProgress.set(false);
                     return Mono.empty();
                 }).subscribe();
@@ -93,30 +93,28 @@ public class TradingServiceImpl implements TradingService {
 // -------------------------- Events from Router processing
 
     private Mono<Void> handleIncomingData(String data) {
-        log.info("TCPservice: received data: '{}'", data);
-
         return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
                 .flatMap(this::handleIncomingMessage) // Process each message individually
                 .then();
     }
 
     private Mono<Void> handleIncomingMessage(String message) {
-        log.info("TCPService: processing message: '{}'", message);
+        log.debug("TCPService: processing message: '{}'", message);
         try { // received initial state update
             FixIdAssignationStockState initialMessage =
                     FixMessage.fromFix(message, new FixIdAssignationStockState());
             return updateStateInitial(initialMessage);
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             try { // received trading response
                 FixResponse response =
                         FixMessage.fromFix(message, new FixResponse());
                 return updateState(response);
-            } catch (MissingRequiredTagException ex) {
+            } catch (FixMessageMisconfiguredException ex) {
                 try {
                     FixStockStateReport followUp =
                             FixMessage.fromFix(message, new FixStockStateReport());
                     return updateStateFollowing(followUp);
-                } catch (MissingRequiredTagException exc) {
+                } catch (FixMessageMisconfiguredException exc) {
                     log.warn("TCP client received invalid message");
                     return Mono.empty();
                 }
@@ -135,7 +133,7 @@ public class TradingServiceImpl implements TradingService {
                 stocksStateMessages.forEach(this::updateState);
                 assignedId = initialMessage.getTarget();
                 initialStateSink.tryEmitNext(serializeCurrentState());
-                log.info("TCPService: stock state updated from initial update. " +
+                log.debug("TCPService: stock state updated from initial update. " +
                         "Emitting update to the flux.");
                 updateRequested.set(false);
             } catch (JsonProcessingException e) {
@@ -166,7 +164,7 @@ public class TradingServiceImpl implements TradingService {
                         new InputEvent<>(
                                 new StocksStateMessage(Map.of(stockId, stockState))));
             });
-            log.info("TCPService: stock state updated from router-sent state update. " +
+            log.debug("TCPService: stock state updated from router-sent state update. " +
                     "Publishing update event.");
             updateRequested.set(false);
         } catch (JsonProcessingException e) {
@@ -175,19 +173,18 @@ public class TradingServiceImpl implements TradingService {
         return Mono.empty();
     }
 
-    // todo: Might not publish response if went wrong
     private Mono<Void> updateState(FixResponse response) {
         String id = response.getSender();
 
         if (!currentStockState.containsKey(id)) {
-            log.warn("Response from unknown stock id: {}", id);
+            log.warn("TCPService: Response from unknown stock id: {}", id);
             return Mono.empty();
         }
         if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
             Map<String, Integer> stock = currentStockState.get(id);
             String instrument = response.getInstrument();
             if (!stock.containsKey(instrument)) {
-                log.warn("Stock id: {} sent response on unknown " +
+                log.warn("TCPService: stock id: {} sent response on unknown " +
                         "instrument: {}", id, instrument);
                 return Mono.empty();
             }
@@ -196,7 +193,7 @@ public class TradingServiceImpl implements TradingService {
             int after = response.getAction() == 1 ?
                     before - response.getAmount() : before + response.getAmount();
             if (after < 0) {
-                log.warn("Remaining instrument amount can't be negative." +
+                log.warn("TCPService: Remaining instrument amount can't be negative." +
                                 "stock response: '{}', current amount: {}",
                         response, before);
                 return Mono.empty();
@@ -206,10 +203,10 @@ public class TradingServiceImpl implements TradingService {
                     new InputEvent<>(
                             new StocksStateMessage(
                                     Map.of(id, currentStockState.get(id)))));
-
-            log.info("TCPService: published 2 events");
+            log.debug("TCPService: published stock update event");
         }
         publisher.publishEvent(new InputEvent<>(response));
+        log.debug("TCPService: published response received event");
         return Mono.empty();
     }
 
@@ -242,7 +239,7 @@ public class TradingServiceImpl implements TradingService {
                         .thenReturn("Trading request sent")
                         .onErrorResume(e -> Mono.just("Trading request not sent:" +
                                 " router service isn't available"));
-            } catch (MissingRequiredTagException e) {
+            } catch (FixMessageMisconfiguredException e) {
                 return Mono.just("Trading request not sent: " + e);
             }
         } else {

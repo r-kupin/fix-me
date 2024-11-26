@@ -72,7 +72,7 @@ public class FixTradeExchangeCommunicationTest {
                         StandardCharsets.UTF_8).then();
             else
                 return Mono.error(new AssertionError("Stock state message is wrong: " + payload));
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             try {
                 FixResponse fix = FixMessage.fromFix(payload, new FixResponse());
                 if (fix.getSender().equals(exchangeID) &&
@@ -85,7 +85,7 @@ public class FixTradeExchangeCommunicationTest {
                     return Mono.empty();
                 else
                     return Mono.error(new AssertionError("Stock trading reply is wrong: " + payload));
-            } catch (MissingRequiredTagException ex) {
+            } catch (FixMessageMisconfiguredException ex) {
                 return Mono.error(new AssertionError("unsupported inbound traffic format: " + payload));
             }
         } catch (JsonProcessingException e) {
@@ -102,7 +102,7 @@ public class FixTradeExchangeCommunicationTest {
                     "TEST1",
                     1,
                     1).asFix();
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             throw new RuntimeException(e);
         }
     }
@@ -110,7 +110,7 @@ public class FixTradeExchangeCommunicationTest {
     private String makeIdAssignationMsg(String exchangeId) {
         try {
             return new FixIdAssignation("R00000", exchangeId).asFix();
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             assert false;
             return null;
         }

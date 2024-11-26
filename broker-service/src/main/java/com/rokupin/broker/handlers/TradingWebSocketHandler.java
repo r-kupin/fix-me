@@ -27,7 +27,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
 
 
     private final TradingService tradingService;
-    //    private final Map<String, WebSocketSession> activeClients;
     private final ObjectMapper objectMapper;
     private final Flux<InputEvent<StocksStateMessage>> stockStateUpdateEventFlux;
     private final Flux<InputEvent<FixResponse>> tradeResponseEventFlux;
@@ -40,7 +39,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         this.objectMapper = objectMapper;
         this.stockStateUpdateEventFlux = Flux.create(stockStateUpdateEventPublisher).share();
         this.tradeResponseEventFlux = Flux.create(tradeResponseEventPublisher).share();
-//        this.activeClients = new ConcurrentHashMap<>();
     }
 
     @PostConstruct
@@ -51,7 +49,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
     @Override
     public Mono<Void> handle(WebSocketSession session) {
         String sessionId = session.getId();
-//        activeClients.putIfAbsent(sessionId, session);
 
         Mono<WebSocketMessage> onConnection = handleNewClient(session);
 
@@ -60,7 +57,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         Flux<WebSocketMessage> onClientMessage = handleClientInput(session);
 
         return session.send(combineOutputs(onConnection, onClientMessage, onStateUpdate, onTradeResponse, sessionId))
-                .doOnError(e -> log.error("Session {} encountered error: {}", sessionId, e.getMessage()))
+                .doOnError(e -> log.error("WSHandler [{}]: encountered error: {}", sessionId, e.getMessage()))
                 .doFinally(handleSessionShutdown(session));
     }
 
@@ -72,25 +69,24 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         return Flux.concat(onConnection, onClientMessage
                         .mergeWith(onStateUpdate)
                         .mergeWith(onTradeResponse))
-                .doOnError(e -> log.error("Error in combined stream for session {}: {}", sessionId, e.getMessage()))
-                .doOnCancel(() -> log.info("Session {} canceled by client", sessionId))
-                .doOnTerminate(() -> log.info("Combined stream completed for session: {}", sessionId));
+                .doOnError(e -> log.error("WSHandler [{}]: error in combined stream: {}", sessionId, e.getMessage()))
+                .doOnCancel(() -> log.info("WSHandler [{}]: canceled by client", sessionId))
+                .doOnTerminate(() -> log.info("WSHandler [{}]: combined stream completed for ", sessionId));
     }
 
     private Consumer<SignalType> handleSessionShutdown(WebSocketSession session) {
         return signalType -> {
-            log.info("Session {} cleanup triggered with signal: {}", session.getId(), signalType);
-//                    activeClients.remove(sessionId);
+            log.info("WSHandler [{}]: cleanup triggered with signal: {}", session.getId(), signalType);
             session.close()
-                    .doOnSuccess(aVoid -> log.info("Session {} closed successfully", session.getId()))
-                    .doOnError(e -> log.error("Failed to close session {}: {}", session.getId(), e.getMessage()))
+                    .doOnSuccess(aVoid -> log.info("WSHandler [{}]: session closed successfully", session.getId()))
+                    .doOnError(e -> log.error("WSHandler [{}]: ailed to close session: {}", session.getId(), e.getMessage()))
                     .subscribe();
         };
     }
 
     private Mono<WebSocketMessage> handleNewClient(WebSocketSession session) {
         return tradingService.getState()
-                .doOnNext(state -> log.info(
+                .doOnNext(state -> log.debug(
                         "WSHandler [{}]: received state '{}' via getState",
                         session.getId(), state)
                 ).map(session::textMessage);
@@ -102,15 +98,13 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 .flatMap(msg -> {
                     if (msg instanceof FixResponse fixResponse) {
                         if (fixResponse.getTargetSubId().equals(session.getId())) {
-                            log.info("WSHandler [{}]: processing trading " +
+                            log.debug("WSHandler [{}]: processing trading " +
                                     "response event '{}'", session.getId(), msg);
                             return fixToClientResponse(session, fixResponse);
                         } else {
                             return Flux.empty();
                         }
                     } else {
-                        log.warn("WSHandler [{}]: event: '{}' doesn't " +
-                                "represent a TradeResponse instance", session.getId(), msg);
                         return Flux.empty();
                     }
                 });
@@ -122,7 +116,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
             ClientTradingResponse response = new ClientTradingResponse(fixResponse);
             try {
                 String jsonResponse = objectMapper.writeValueAsString(response);
-                log.info("WSHandler [{}]: sending a trade " +
+                log.debug("WSHandler [{}]: sending a trade " +
                         "response: '{}'", session.getId(), jsonResponse);
                 return Mono.just(jsonResponse).map(session::textMessage);
             } catch (JsonProcessingException e) {
@@ -131,7 +125,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                         session.getId(), response, e.getMessage());
                 return Mono.empty();
             }
-        } catch (MissingRequiredTagException e) {
+        } catch (FixMessageMisconfiguredException e) {
             log.warn("WSHandler [{}]: Fix trading response: '{}' can't be " +
                             "converted to the ClientResponse:'{}'",
                     session.getId(), fixResponse, e.getMessage());
@@ -143,9 +137,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         return stockStateUpdateEventFlux
                 .map(EventObject::getSource)
                 .flatMap(msg -> {
-                    log.info("WSHandler [{}]: processing stock update event '{}'",
-                            session.getId(), msg);
-
                     if (msg instanceof StocksStateMessage stocksStateMessage) {
                         try {
                             String stocksStateJson = objectMapper.writeValueAsString(stocksStateMessage);
@@ -158,8 +149,6 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                             return Flux.empty();
                         }
                     } else {
-                        log.warn("WSHandler [{}]: event: '{}' doesn't " +
-                                "represent a StocksState instance", session.getId(), msg);
                         return Flux.empty();
                     }
                 });
@@ -187,7 +176,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                                 session.getId(), e.toString());
                         response_msg = Mono.just("Trading request not sent:" +
                                 " JSON syntax is incorrect");
-                    } catch (MissingRequiredTagException e) {
+                    } catch (FixMessageMisconfiguredException e) {
                         log.warn("WSHandler [{}]: Fix Request creation failed : {}",
                                 session.getId(), e.toString());
                         response_msg = Mono.just("Trading request not sent:" +

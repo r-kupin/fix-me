@@ -19,13 +19,6 @@ eureka:
     service-url:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
 
-
-#logging:
-#  pattern:
-#    console: "%-5level: %class{0} - %msg%n"
-#  level:
-#    root: INFO
-#    org.springframework: INFO
-#    org.springframework.boot: DEBUG
-#    org.springframework.data.r2dbc: DEBUG
-#    com.apress.prospring6.twenty: DEBUG
+logging:
+  level:
+    com.rokupin.broker: DEBUG

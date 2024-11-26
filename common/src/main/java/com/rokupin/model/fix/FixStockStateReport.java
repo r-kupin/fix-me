@@ -19,13 +19,13 @@ public class FixStockStateReport extends FixMessage {
     private String stockJson;
 
     @Override
-    protected void parseFields(Map<Integer, String> fixFields) throws MissingRequiredTagException {
+    protected void parseFields(Map<Integer, String> fixFields) throws FixMessageMisconfiguredException {
         this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
         this.stockJson = getRequiredField(fixFields, TAG_STOCK_STATE_JSON);
     }
 
     @Override
-    protected void appendFields(StringBuilder fixMessage) throws MissingRequiredTagException {
+    protected void appendFields(StringBuilder fixMessage) throws FixMessageMisconfiguredException {
         appendTag(fixMessage, TAG_MSG_TYPE, MSG_STOCK_REPORT);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_STOCK_STATE_JSON, stockJson);
