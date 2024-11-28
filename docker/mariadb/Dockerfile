@@ -1,5 +1,6 @@
 FROM alpine:latest
 
+ARG DB_PORT
 ARG DB_ADMIN_PASSWORD
 ARG DB_DEFAULT_USERNAME
 ARG DB_DEFAULT_PASSWORD
@@ -20,7 +21,7 @@ RUN sh create_db.sh && rm -f /*.sh
 
 COPY init.sql /docker-entrypoint-initdb.d/
 
-EXPOSE 3306
+EXPOSE $DB_PORT
 
 USER mysql
 

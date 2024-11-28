@@ -4,13 +4,13 @@ services:
       context: ./mariadb
       dockerfile: Dockerfile
       args:
-        DB_ADMIN_USERNAME: ${DB_ADMIN_USERNAME}
+        DB_PORT: ${DB_PORT}
         DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD}
         DB_DEFAULT_USERNAME: ${DB_DEFAULT_USERNAME}
         DB_DEFAULT_PASSWORD: ${DB_DEFAULT_PASSWORD}
         DB_DEFAULT_NAME: ${DB_DEFAULT_NAME}
     ports:
-      - "3306:3306"
+      - "${DB_PORT}:${DB_PORT}"
     networks:
       - fix-me-network
     volumes:
@@ -26,10 +26,10 @@ services:
       dockerfile: Dockerfile
     container_name: eureka-server
     environment:
-      - EUREKA_PORT=8761
+      - EUREKA_PORT=${EUREKA_PORT}
       - EUREKA_HOST=eureka-server
     ports:
-      - "8761:8761"
+      - "${EUREKA_PORT}:${EUREKA_PORT}"
     networks:
       - fix-me-network
     deploy:
@@ -106,10 +106,10 @@ services:
       dockerfile: Dockerfile
     container_name: gateway-service
     environment:
-      - SERVER_LISTEN_PORT=8080
-      - EUREKA_URI=http://eureka-server:8761/eureka/
+      - SERVER_LISTEN_PORT=${GATEWAY_PORT}
+      - EUREKA_URI=http://eureka-server:${EUREKA_PORT}/eureka/
     ports:
-      - "8080:8080"
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     networks:
       - fix-me-network
     depends_on:
