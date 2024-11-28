@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
+import java.util.Objects;
 
 
 @EqualsAndHashCode(callSuper = true)
@@ -13,7 +14,9 @@ import java.util.Map;
 @NoArgsConstructor
 @Data
 public class FixRequest extends FixMessage {
-    private static final int TAG_SOURCE_SUB_ID = 50;
+    public static final int SIDE_BUY = 1;
+    public static final int SIDE_SELL = 2;
+
     private static final String MSG_TYPE_NEW_ORDER = "D";
 
     private String sender;      // SenderCompID (49)
@@ -24,11 +27,17 @@ public class FixRequest extends FixMessage {
     private int amount;         // OrderQty (38)
 
     public FixRequest(ClientTradingRequest clientMsg) throws FixMessageMisconfiguredException {
-        this.target = clientMsg.getTarget();
-        this.instrument = clientMsg.getInstrument();
-        this.action = getSide(clientMsg.getAction());
-        this.amount = clientMsg.getAmount();
-        validate();
+        if (Objects.nonNull(clientMsg.getTarget()) &&
+                Objects.nonNull(clientMsg.getInstrument()) &&
+                Objects.nonNull(clientMsg.getAction())) {
+            this.target = clientMsg.getTarget();
+            this.instrument = clientMsg.getInstrument();
+            this.action = getSide(clientMsg.getAction());
+            this.amount = clientMsg.getAmount();
+            validate();
+        } else {
+            throw new FixMessageMisconfiguredException("No fields of JSON clientMsg can be null.");
+        }
     }
 
     @Override
@@ -54,13 +63,13 @@ public class FixRequest extends FixMessage {
 
     @Override
     protected void validate() throws FixMessageMisconfiguredException {
-        if (action != 1 && action != 2)
+        if (action != SIDE_BUY && action != SIDE_SELL)
             throw new FixMessageMisconfiguredException(
-                    "Side (54) should be 1 (Buy) or 2 (Sell). Provided: '" +
+                    "'action' [Side (54)] should be either 'buy' or 'sell'. Provided: '" +
                             action + "'");
         if (amount < 1)
             throw new FixMessageMisconfiguredException(
-                    "OrderQty (38) should be a positive integer. Provided: '" +
+                    "'amount' [OrderQty (38)] should be a positive integer. Provided: '" +
                             amount + "'");
     }
 }

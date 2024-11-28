@@ -19,17 +19,23 @@ public class FixResponse extends FixMessage {
     private static final int TAG_LAST_SHARES = 32;
     private static final int TAG_ORDER_ID = 37;
     private static final int TAG_ORD_STATUS = 39;
-    private static final int TAG_TARGET_SUB_ID = 57;
     private static final int TAG_EXEC_TYPE = 150;
     private static final String MSG_EXECUTION_REPORT = "8";
 
-    private String sender;      // SenderCompID (49)
-    private String target;      // TargetCompID (56)    >> assigned ID
-    private String targetSubId; // TargetSubID (57)     >> WS session ID
-    private String instrument;  // Symbol (55)
-    private int action;         // Side (54) - 1 = Buy, 2 = Sell
-    private int amount;         // OrderQty (38)
-    private int ordStatus;      // OrdStatus (39) - 0 = New, 2 = Filled, 8 = Rejected
+    public static final int UNSPECIFIED = 0;
+    public static final int UNSUPPORTED_FORMAT = 1;
+    public static final int EXCHANGE_IS_NOT_AVAILABLE = 2;
+    public static final int INSTRUMENT_NOT_SUPPORTED = 3;
+    public static final int EXCHANGE_LACKS_REQUESTED_AMOUNT = 4;
+
+    private String sender;          // SenderCompID (49)
+    private String target;          // TargetCompID (56)    >> assigned ID
+    private String targetSubId;     // TargetSubID (57)     >> WS session ID
+    private String instrument;      // Symbol (55)
+    private int action;             // Side (54) - 1 = Buy, 2 = Sell
+    private int amount;             // OrderQty (38)
+    private int ordStatus;          // OrdStatus (39) - 0 = New, 2 = Filled, 8 = Rejected
+    private int rejectionReason;    // OrdRejReason (103)
 
     @Override
     protected void parseFields(Map<Integer, String> fixFields) throws FixMessageMisconfiguredException {
@@ -40,6 +46,9 @@ public class FixResponse extends FixMessage {
         this.action = Integer.parseInt(getRequiredField(fixFields, TAG_SIDE));
         this.amount = Integer.parseInt(getRequiredField(fixFields, TAG_ORDER_QTY));
         this.ordStatus = Integer.parseInt(getRequiredField(fixFields, TAG_ORD_STATUS));
+        this.rejectionReason = 0;
+        if (fixFields.containsKey(TAG_ORD_REJ_REASON))
+            this.rejectionReason = Integer.parseInt(fixFields.get(TAG_ORD_REJ_REASON));
     }
 
     @Override
@@ -52,6 +61,8 @@ public class FixResponse extends FixMessage {
         appendTag(fixMessage, TAG_SIDE, String.valueOf(action));
         appendTag(fixMessage, TAG_ORDER_QTY, String.valueOf(amount));
         appendTag(fixMessage, TAG_ORD_STATUS, String.valueOf(ordStatus));
+        if (rejectionReason > 0)
+            appendTag(fixMessage, TAG_ORD_REJ_REASON, String.valueOf(rejectionReason));
     }
 
     @Override
@@ -68,5 +79,20 @@ public class FixResponse extends FixMessage {
             throw new FixMessageMisconfiguredException(
                     "OrdStatus (39) should be 0 (New), 2 (Filled) or 8 (Rejected)." +
                             " Provided: '" + ordStatus + "'");
+
+        if (rejectionReason < 0 || rejectionReason > 5)
+            throw new FixMessageMisconfiguredException(
+                    "OrdRejReason (103) should be >= 0 and <= 4 Provided: '" +
+                            rejectionReason + "'");
+    }
+
+    public String getDescription() {
+        return switch (rejectionReason) {
+            case 1 -> "Unsupported format";
+            case 2 -> "Target exchange is unavailable";
+            case 3 -> "Target exchange doesn't operate with requested instrument";
+            case 4 -> "Target exchange doesn't possess requested quantity";
+            default -> "Reason unknown";
+        };
     }
 }

@@ -156,17 +156,9 @@ public class TradingServiceImpl implements TradingService {
     private Mono<Void> updateStateFollowing(FixStockStateReport stateReport) {
         try {
             Map<String, Map<String, Integer>> state = objectMapper.readValue(
-                    stateReport.getStockJson(), new TypeReference<>() {
-                    });
-            state.forEach((stockId, stockState) -> {
-                updateState(stockId, stockState);
-                publisher.publishEvent(
-                        new InputEvent<>(
-                                new StocksStateMessage(Map.of(stockId, stockState))));
-            });
-            log.debug("TCPService: stock state updated from router-sent state update. " +
-                    "Publishing update event.");
-            updateRequested.set(false);
+                    stateReport.getStockJson(), new TypeReference<>() {});
+            state.forEach(this::updateState);
+            publishCurrentStockState();
         } catch (JsonProcessingException e) {
             log.warn("TCPService: received follow-up stock state JSON parsing failed");
         }
@@ -190,7 +182,7 @@ public class TradingServiceImpl implements TradingService {
             }
 
             int before = stock.get(instrument);
-            int after = response.getAction() == 1 ?
+            int after = response.getAction() == FixRequest.SIDE_BUY ?
                     before - response.getAmount() : before + response.getAmount();
             if (after < 0) {
                 log.warn("TCPService: Remaining instrument amount can't be negative." +
@@ -199,11 +191,10 @@ public class TradingServiceImpl implements TradingService {
                 return Mono.empty();
             }
             stock.replace(instrument, after);
-            publisher.publishEvent(
-                    new InputEvent<>(
-                            new StocksStateMessage(
-                                    Map.of(id, currentStockState.get(id)))));
-            log.debug("TCPService: published stock update event");
+            publishCurrentStockState();
+        } else if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+            currentStockState.remove(response.getSender());
+            publishCurrentStockState();
         }
         publisher.publishEvent(new InputEvent<>(response));
         log.debug("TCPService: published response received event");
@@ -280,9 +271,16 @@ public class TradingServiceImpl implements TradingService {
 
 // -------------------------- Util
 
+
+    private void publishCurrentStockState() {
+        publisher.publishEvent(new InputEvent<>(new StocksStateMessage(currentStockState)));
+        log.debug("TCPService: published stock update event");
+        updateRequested.set(false);
+    }
+
     private String serializeCurrentState() {
         try {
-            return objectMapper.writeValueAsString(currentStockState);
+            return objectMapper.writeValueAsString(new StocksStateMessage(currentStockState));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize currentStockState");
         }

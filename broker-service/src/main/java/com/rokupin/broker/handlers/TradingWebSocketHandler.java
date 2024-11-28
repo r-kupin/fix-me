@@ -157,33 +157,35 @@ public class TradingWebSocketHandler implements WebSocketHandler {
     private Flux<WebSocketMessage> handleClientInput(WebSocketSession session) {
         return session.receive()
                 .map(WebSocketMessage::getPayloadAsText)
-                .flatMap(msg -> {
-                    Mono<String> response_msg;
-                    log.info("WSHandler [{}]: processing request '{}'",
-                            session.getId(), msg);
-                    try {
-                        ClientTradingRequest clientMsg = objectMapper.readValue(msg, ClientTradingRequest.class);
-                        FixRequest request = new FixRequest(clientMsg);
-                        request.setSenderSubId(session.getId());
-                        response_msg = tradingService.handleTradingRequest(request);
-                    } catch (JsonMappingException e) {
-                        log.warn("WSHandler [{}]: Mapping failed: {}",
-                                session.getId(), e.toString());
-                        response_msg = Mono.just("Trading request not sent:" +
-                                " mapping to FIX message failed");
-                    } catch (JsonProcessingException e) {
-                        log.warn("WSHandler [{}]: JSON parsing failed: {}",
-                                session.getId(), e.toString());
-                        response_msg = Mono.just("Trading request not sent:" +
-                                " JSON syntax is incorrect");
-                    } catch (FixMessageMisconfiguredException e) {
-                        log.warn("WSHandler [{}]: Fix Request creation failed : {}",
-                                session.getId(), e.toString());
-                        response_msg = Mono.just("Trading request not sent:" +
-                                " provided input can't be converted to the Fix Request '" +
-                                e.getMessage() + "'");
-                    }
-                    return response_msg.map(session::textMessage);
-                });
+                .flatMap(msg -> clientInputHandler(msg, session));
+    }
+
+    Mono<WebSocketMessage> clientInputHandler(String msg, WebSocketSession session) {
+        Mono<String> response_msg;
+        log.info("WSHandler [{}]: processing request '{}'",
+                session.getId(), msg);
+        try {
+            ClientTradingRequest clientMsg = objectMapper.readValue(msg, ClientTradingRequest.class);
+            FixRequest request = new FixRequest(clientMsg);
+            request.setSenderSubId(session.getId());
+            response_msg = tradingService.handleTradingRequest(request);
+        } catch (JsonMappingException e) {
+            log.warn("WSHandler [{}]: Mapping failed: {}",
+                    session.getId(), e.toString());
+            response_msg = Mono.just("Trading request not sent:" +
+                    " mapping to FIX message failed: " + e);
+        } catch (JsonProcessingException e) {
+            log.warn("WSHandler [{}]: JSON parsing failed: {}",
+                    session.getId(), e.toString());
+            response_msg = Mono.just("Trading request not sent:" +
+                    " JSON syntax is incorrect: " + e);
+        } catch (FixMessageMisconfiguredException e) {
+            log.warn("WSHandler [{}]: Fix Request creation failed: {}",
+                    session.getId(), e.toString());
+            response_msg = Mono.just("Trading request not sent:" +
+                    " provided input can't be converted to the Fix Request. Reason: '" +
+                    e.getMessage() + "'");
+        }
+        return response_msg.map(session::textMessage);
     }
 }

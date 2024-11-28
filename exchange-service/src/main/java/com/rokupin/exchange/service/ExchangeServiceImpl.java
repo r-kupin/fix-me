@@ -145,26 +145,26 @@ public class ExchangeServiceImpl {
                 request.getInstrument(),
                 request.getAction(),
                 request.getAmount(),
-                FixResponse.MSG_ORD_FILLED
+                FixResponse.MSG_ORD_FILLED,
+                FixResponse.UNSPECIFIED
         );
         return stockRepo.findByName(request.getInstrument())
                 .flatMap(entry -> {
-                    if (request.getAction() == 1 && entry.amount() >= request.getAmount()) {
-                        // Update stock amount if buy action and sufficient quantity exists
+                    if (request.getAction() == FixRequest.SIDE_BUY &&
+                            entry.amount() >= request.getAmount()) {
                         return updateStockQuantity(entry, entry.amount() - request.getAmount())
                                 .thenReturn(response);
-                    } else if (request.getAction() == 2) {
-                        // Update stock amount for a sell action (increasing stock quantity)
+                    } else if (request.getAction() == FixRequest.SIDE_SELL) {
                         return updateStockQuantity(entry, entry.amount() + request.getAmount())
                                 .thenReturn(response);
                     } else {
-                        // Insufficient quantity for buy, reject order
                         response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                        response.setRejectionReason(FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT);
                         return Mono.just(response);
                     }
                 }).switchIfEmpty(Mono.defer(() -> {
-                    // Instrument not found
                     response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                    response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
                     return Mono.just(response);
                 }));
     }

@@ -14,6 +14,7 @@ public class ClientTradingResponse {
     private String instrument;
     private String action;
     private String ordStatus;
+    private String rejectionReason;
     private int amount;
 
     public ClientTradingResponse(FixResponse fix) throws FixMessageMisconfiguredException {
@@ -35,5 +36,7 @@ public class ClientTradingResponse {
                     "Side parameter should be either '1' or '2' but '" +
                             fix.getAction() + "' provided");
         };
+        if (fix.getRejectionReason() != FixResponse.UNSPECIFIED)
+            this.rejectionReason = fix.getDescription();
     }
 }

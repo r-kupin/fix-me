@@ -8,13 +8,16 @@ import java.util.stream.Collectors;
 public abstract class FixMessage implements Serializable {
     protected static final int TAG_STOCK_STATE_JSON = 0;
     protected static final int TAG_BEGIN_STRING = 8;
-    protected static final int TAG_MSG_TYPE = 35;
-    protected static final int TAG_SOURCE_COMP_ID = 49;
-    protected static final int TAG_SYMBOL = 55;
-    protected static final int TAG_SIDE = 54;
     protected static final int TAG_CHECKSUM = 10;
+    protected static final int TAG_MSG_TYPE = 35;
     protected static final int TAG_ORDER_QTY = 38;
+    protected static final int TAG_SOURCE_COMP_ID = 49;
+    protected static final int TAG_SOURCE_SUB_ID = 50;
+    protected static final int TAG_SIDE = 54;
+    protected static final int TAG_SYMBOL = 55;
     protected static final int TAG_TARGET_COMP_ID = 56;
+    protected static final int TAG_TARGET_SUB_ID = 57;
+    protected static final int TAG_ORD_REJ_REASON = 103;
 
     public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws FixMessageMisconfiguredException {
         Map<Integer, String> fixFields = Arrays.stream(fixMessage.split("\u0001"))

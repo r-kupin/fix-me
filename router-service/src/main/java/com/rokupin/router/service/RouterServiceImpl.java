@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
+import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpServer;
 
 import java.nio.charset.StandardCharsets;
@@ -61,10 +62,8 @@ public class RouterServiceImpl {
                         .asString(StandardCharsets.UTF_8)
                         .flatMap(data -> Flux.fromIterable(FixMessage.splitFixMessages(data)))
                         .flatMap(this::handleBrokerInput)
-                        .doOnError(e -> log.error(
-                                "Broker service interaction went wrong: {}",
-                                e.getMessage())
-                        ).then()
+                        .onErrorResume(e -> handleBrokerCommunicationError(e, outbound))
+                        .then()
                 ).bindNow()
                 .onDispose()
                 .subscribe();
@@ -159,7 +158,7 @@ public class RouterServiceImpl {
 
             log.debug("Sending trading response to '{}'", response.getTarget());
             if (!stateModified)
-                return forwardResponseToTargetBroker(connection, input);
+                return forwardResponseToTargetBroker(connection.outbound(), input);
             return sendStateUpdateWithResponse(response, connection, input);
         } catch (FixMessageMisconfiguredException e) {
             log.error("Unsupported inbound traffic format: {}", e.getMessage());
@@ -174,7 +173,7 @@ public class RouterServiceImpl {
 
         return Flux.concat(
                 broadcastToBrokers(response.getTarget(), broadcastMessage),
-                forwardResponseToTargetBroker(brokerConnection, input)
+                forwardResponseToTargetBroker(brokerConnection.outbound(), input)
         ).then();
     }
 
@@ -188,7 +187,8 @@ public class RouterServiceImpl {
                     Connection connection = entry.getValue();
                     return connection.outbound()
                             .sendString(Mono.just(message), StandardCharsets.UTF_8)
-                            .then();
+                            .then()
+                            .doOnError(e -> log.warn("Failed to send state"));
                 }).then();
     }
 
@@ -199,14 +199,16 @@ public class RouterServiceImpl {
                     Connection connection = entry.getValue();
                     return connection.outbound()
                             .sendString(Mono.just(message), StandardCharsets.UTF_8)
-                            .then();
+                            .then()
+                            .doOnError(e -> log.warn("Failed to send state"));
                 }).then();
     }
 
-    private Mono<Void> forwardResponseToTargetBroker(Connection brokerConnection, String message) {
-        return brokerConnection.outbound()
+    private Mono<Void> forwardResponseToTargetBroker(NettyOutbound outbound, String message) {
+        return outbound
                 .sendString(Mono.just(message), StandardCharsets.UTF_8)
-                .then();
+                .then()
+                .doOnError(e -> log.warn("Failed to forward trading response"));
     }
 
 // ---------------- DB cache update
@@ -233,7 +235,7 @@ public class RouterServiceImpl {
                         "instrument: {}", id, instrument);
             } else {
                 int before = stock.get(instrument);
-                int after = response.getAction() == 1 ?
+                int after = response.getAction() == FixRequest.SIDE_BUY ?
                         before - response.getAmount() : before + response.getAmount();
                 if (after < 0) {
                     log.warn("Remaining instrument amount can't be negative." +
@@ -244,6 +246,10 @@ public class RouterServiceImpl {
                     return true;
                 }
             }
+        } else if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+            exchangeConnections.remove(response.getSender());
+            stateCache.remove(response.getSender());
+            return true;
         }
         return false;
     }
@@ -257,6 +263,7 @@ public class RouterServiceImpl {
                     id, newId, objectMapper.writeValueAsString(stateCache)
             );
             brokerConnections.put(newId, connection);
+            log.debug("New broker '{}' connected", newId);
             return Mono.just(msg.asFix());
         } catch (FixMessageMisconfiguredException e) {
             log.error("Cant make an broker welcome string: {}", e.getMessage());
@@ -267,21 +274,52 @@ public class RouterServiceImpl {
     }
 
     private Mono<Void> handleBrokerInput(String input) {
+        log.debug("Received '{}' from broker", input);
         try {
             FixRequest request = FixMessage.fromFix(input, new FixRequest());
 
             Connection exchangeConnection = exchangeConnections.get(request.getTarget());
-            if (exchangeConnection != null) {
+            if (Objects.nonNull(exchangeConnection)) {
                 return exchangeConnection.outbound()
                         .sendString(Mono.just(input), StandardCharsets.UTF_8)
-                        .then();
+                        .then()
+                        .onErrorResume(e -> handleTradingResponseMsg(
+                                makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE)));
             } else {
-                log.warn("Target exchange {} not connected for trading request",
-                        request.getTarget());
+                log.warn("Target exchange {} is unavailable", request.getTarget());
+                String fixMsg = makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE);
+                return Mono.error(new ConnectivityException(fixMsg));
             }
         } catch (FixMessageMisconfiguredException e) {
-            log.error("unsupported broker input format: {}", e.getMessage());
+            log.warn("Unsupported broker input format: {}", e.getMessage());
+            return Mono.empty();
         }
+    }
+
+    private String makeFixResponseStr(FixRequest request, int reason) {
+        try {
+            return new FixResponse(
+                    request.getTarget(),        // non-accessible exchange (In fact, Router)
+                    request.getSender(),        // receiving service id
+                    request.getSenderSubId(),   // receiving client id
+                    request.getInstrument(),
+                    request.getAction(),
+                    request.getAmount(),
+                    FixResponse.MSG_ORD_REJECTED,
+                    reason
+            ).asFix();
+        } catch (FixMessageMisconfiguredException e) {
+            log.error("FixResponse for request {}, reason {} failed: {}", request, reason, e.getMessage());
+            return null;
+        }
+    }
+
+    private Mono<Void> handleBrokerCommunicationError(Throwable throwable, NettyOutbound outbound) {
+        if (throwable instanceof ConnectivityException e ) {
+            log.debug("Sending fix error message: '{}'", e.getMessage());
+            return forwardResponseToTargetBroker(outbound, e.getMessage());
+        }
+        log.warn("Broker service communication went wrong '{}'", throwable.getMessage());
         return Mono.empty();
     }
 }
