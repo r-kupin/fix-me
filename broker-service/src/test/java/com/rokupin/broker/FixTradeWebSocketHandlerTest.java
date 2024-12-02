@@ -1,7 +1,6 @@
 package com.rokupin.broker;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
@@ -32,6 +31,7 @@ public class FixTradeWebSocketHandlerTest {
     private WebSocketClient mockClient;
     private TcpServer mockRouterServer;
     private URI brockerServiceWsUri;
+    private final boolean[] clientSentRequest = {false, false, false, false};
 
     @BeforeEach
     public void setup() {
@@ -126,50 +126,48 @@ public class FixTradeWebSocketHandlerTest {
     private Mono<Void> sendRequestWaitForStockStateUpdate(WebSocketSession session, int clientMockId) {
         return session.receive()
                 .map(WebSocketMessage::getPayloadAsText)
-                .flatMap(msg -> {
-                    System.out.println("WS ClientMock" + clientMockId +
-                            ": received : '" + msg + "'");
-                    try { // if message is a stocks state
-                        String requestJson = assembleTradingRequestJson(clientMockId, msg);
-                        return session.send(Mono.just(session.textMessage(requestJson)));
-                    } catch (JsonProcessingException e) {
-                        try { // if message is a trading response
-                            processTradingResponse(clientMockId, msg);
-                            return Mono.empty();
-                        } catch (JsonProcessingException ex) {
-                            if (msg.equals("Trading request sent")) {
-                                // if message is a sending confirmation
-                                return Mono.empty();
-                            }
-                            try {
-                                StocksStateMessage stocksStateMessage = objectMapper.readValue(msg, StocksStateMessage.class);
-                                System.out.println("WS ClientMock" + clientMockId + ": received : '" + stocksStateMessage + "'");
-                                return Mono.empty();
-                            } catch (JsonProcessingException exception) {
-                                return Mono.error(new AssertionError(
-                                        "Received message '" + msg +
-                                                "' was expected to be a valid StocksStateMessage instance"));
-                            }
-                        }
-                    }
-                }).then(Mono.fromRunnable(() -> {
+                .flatMap(msg -> onMessage(msg, clientMockId, session))
+                .then(Mono.fromRunnable(() -> {
                     System.out.println("WS ClientMock" + clientMockId + ": disconnecting gracefully");
                     session.close().subscribe();  // Close session to simulate graceful disconnect
                 }));
     }
 
+    private Mono<Void> onMessage(String msg, int clientMockId, WebSocketSession session) {
+        System.out.println("WS ClientMock" + clientMockId + ": received : '" + msg + "'");
+        try { // if message is a stocks state
+            StocksStateMessage stocksStateMessage = objectMapper.readValue(msg, StocksStateMessage.class);
+            if (!clientSentRequest[clientMockId]) {
+                clientSentRequest[clientMockId] = true;
+                String requestJson = assembleTradingRequestJson(stocksStateMessage, clientMockId);
+                return session.send(Mono.just(session.textMessage(requestJson)));
+            } else {
+                return Mono.empty();
+            }
+        } catch (JsonProcessingException e) {
+            try { // if message is a trading response
+                processTradingResponse(clientMockId, msg);
+                return Mono.empty();
+            } catch (JsonProcessingException ex) {
+                if (msg.equals("Trading request sent")) {
+                    // if message is a sending confirmation
+                    return Mono.empty();
+                } else {
+                    return Mono.error(new AssertionError(
+                            "Received message '" + msg + "' was not expected"));
+                }
+            }
+        }
+    }
+
     private void processTradingResponse(int clientMockId, String response) throws JsonProcessingException {
-        FixResponse responseJson = objectMapper.readValue(response, FixResponse.class);
+        ClientTradingResponse responseJson = objectMapper.readValue(response, ClientTradingResponse.class);
         System.out.println("WS ClientMock" + clientMockId +
                 ": received trading response: '" + responseJson + "'");
     }
 
-    private String assembleTradingRequestJson(int clientMockId, String stateJson) throws JsonProcessingException {
-        Map<String, Map<String, Integer>> stocksStateMessages = objectMapper.readValue(
-                stateJson, new TypeReference<>() {
-                }
-        );
-        if (!stocksStateMessages.containsKey("E00000")) {
+    private String assembleTradingRequestJson(StocksStateMessage stocksStateMessage, int clientMockId) throws JsonProcessingException {
+        if (!stocksStateMessage.getStocks().containsKey("E00000")) {
             System.out.println("Received StockStates lacking of expected stock data");
             assert false;
             return null;
@@ -203,7 +201,7 @@ public class FixTradeWebSocketHandlerTest {
                     request.getAction(),
                     request.getAmount(),
                     FixResponse.MSG_ORD_REJECTED,
-                    -1
+                    FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT
             );
             System.out.println("Instrument:'" + instrument + "', " +
                     "amount after: " + after + " state before '" + stocks + "'");
@@ -213,6 +211,7 @@ public class FixTradeWebSocketHandlerTest {
             }
             System.out.println("transaction succeed");
             response.setOrdStatus(FixResponse.MSG_ORD_FILLED);
+            response.setRejectionReason(0);
             stocks.get(request.getTarget()).replace(request.getInstrument(), after);
             return response;
         } catch (Exception e) {
