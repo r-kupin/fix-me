@@ -205,8 +205,7 @@ public class RouterServiceImpl {
     }
 
     private Mono<Void> forwardResponseToTargetBroker(NettyOutbound outbound, String message) {
-        return outbound
-                .sendString(Mono.just(message), StandardCharsets.UTF_8)
+        return outbound.sendString(Mono.just(message), StandardCharsets.UTF_8)
                 .then()
                 .doOnError(e -> log.warn("Failed to forward trading response"));
     }

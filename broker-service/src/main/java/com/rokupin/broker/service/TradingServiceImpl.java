@@ -130,6 +130,7 @@ public class TradingServiceImpl implements TradingService {
                                 initialMessage.getStockJson(),
                                 new TypeReference<>() {
                                 });
+                currentStockState.clear();
                 stocksStateMessages.forEach(this::updateState);
                 assignedId = initialMessage.getTarget();
                 initialStateSink.tryEmitNext(serializeCurrentState());
@@ -157,6 +158,7 @@ public class TradingServiceImpl implements TradingService {
         try {
             Map<String, Map<String, Integer>> state = objectMapper.readValue(
                     stateReport.getStockJson(), new TypeReference<>() {});
+            currentStockState.clear();
             state.forEach(this::updateState);
             publishCurrentStockState();
         } catch (JsonProcessingException e) {

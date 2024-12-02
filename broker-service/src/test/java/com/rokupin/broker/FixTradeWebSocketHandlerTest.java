@@ -202,7 +202,8 @@ public class FixTradeWebSocketHandlerTest {
                     request.getInstrument(),
                     request.getAction(),
                     request.getAmount(),
-                    FixResponse.MSG_ORD_REJECTED
+                    FixResponse.MSG_ORD_REJECTED,
+                    -1
             );
             System.out.println("Instrument:'" + instrument + "', " +
                     "amount after: " + after + " state before '" + stocks + "'");

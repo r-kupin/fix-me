@@ -134,24 +134,25 @@ public class TradingWebSocketHandler implements WebSocketHandler {
     }
 
     private Flux<WebSocketMessage> handleStateUpdateEvent(WebSocketSession session) {
-        return stockStateUpdateEventFlux
-                .map(EventObject::getSource)
-                .flatMap(msg -> {
-                    if (msg instanceof StocksStateMessage stocksStateMessage) {
-                        try {
-                            String stocksStateJson = objectMapper.writeValueAsString(stocksStateMessage);
-                            log.info("WSHandler [{}]: broadcasting a stock " +
-                                    "state update: '{}'", session.getId(), stocksStateJson);
-                            return Mono.just(stocksStateJson).map(session::textMessage);
-                        } catch (JsonProcessingException e) {
-                            log.warn("WSHandler [{}]: state update event: '{}' can't be " +
-                                    "serialized to JSON", session.getId(), stocksStateMessage);
-                            return Flux.empty();
-                        }
-                    } else {
-                        return Flux.empty();
-                    }
-                });
+        return stockStateUpdateEventFlux.map(EventObject::getSource)
+                .flatMap(msg -> eventHandler(msg, session));
+    }
+
+    private Mono<WebSocketMessage> eventHandler(Object msg, WebSocketSession session) {
+        if (msg instanceof StocksStateMessage stocksStateMessage) {
+            try {
+                String stocksStateJson = objectMapper.writeValueAsString(stocksStateMessage);
+                log.info("WSHandler [{}]: broadcasting a stock " +
+                        "state update: '{}'", session.getId(), stocksStateJson);
+                return Mono.just(stocksStateJson).map(session::textMessage);
+            } catch (JsonProcessingException e) {
+                log.warn("WSHandler [{}]: state update event: '{}' can't be " +
+                        "serialized to JSON", session.getId(), stocksStateMessage);
+                return Mono.empty();
+            }
+        } else {
+            return Mono.empty();
+        }
     }
 
     private Flux<WebSocketMessage> handleClientInput(WebSocketSession session) {
@@ -160,7 +161,7 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 .flatMap(msg -> clientInputHandler(msg, session));
     }
 
-    Mono<WebSocketMessage> clientInputHandler(String msg, WebSocketSession session) {
+    private Mono<WebSocketMessage> clientInputHandler(String msg, WebSocketSession session) {
         Mono<String> response_msg;
         log.info("WSHandler [{}]: processing request '{}'",
                 session.getId(), msg);

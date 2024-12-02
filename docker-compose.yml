@@ -1,7 +1,7 @@
 services:
   mariadb:
     build:
-      context: ./mariadb
+      context: mariadb
       dockerfile: Dockerfile
       args:
         DB_PORT: ${DB_PORT}
@@ -22,7 +22,7 @@ services:
 
   eureka-server:
     build:
-      context: ../eureka-server
+      context: eureka-server
       dockerfile: Dockerfile
     container_name: eureka-server
     environment:
@@ -39,8 +39,7 @@ services:
 
   router-service:
     build:
-      context: ../router-service
-      dockerfile: Dockerfile
+      context: router-service
     container_name: router-service
     environment:
       - ROUTER_HOST=router-service
@@ -58,8 +57,7 @@ services:
 
   broker-service:
     build:
-      context: ../broker-service
-      dockerfile: Dockerfile
+      context: broker-service
     environment:
       - ROUTER_HOST=router-service
       - ROUTER_BROKER_PORT=5000
@@ -81,8 +79,7 @@ services:
 
   exchange-service:
     build:
-      context: ../exchange-service
-      dockerfile: Dockerfile
+      context: exchange-service
     env_file: .env
     environment:
       - ROUTER_HOST=router-service
@@ -102,8 +99,7 @@ services:
 
   gateway-service:
     build:
-      context: ../gateway-service
-      dockerfile: Dockerfile
+      context: gateway-service
     container_name: gateway-service
     environment:
       - SERVER_LISTEN_PORT=${GATEWAY_PORT}
@@ -119,6 +115,19 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+
+  exchange-service-new:
+    build:
+      context: exchange-service
+    environment:
+      - ROUTER_HOST=router-service
+      - ROUTER_EXCHANGE_PORT=5001
+      - DB_URL=r2dbc:mariadb://mariadb:3306/stock_2_db
+      - DB_USERNAME=stock_2_db_service
+      - DB_PASSWORD=stock_2_db_service_pass
+      - EUREKA_URI=http://eureka-server:8761/eureka/
+    networks:
+      - fix-me-network
 
 networks:
   fix-me-network:
