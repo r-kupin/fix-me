@@ -73,7 +73,7 @@ public abstract class FixMessage implements Serializable {
     }
 
     protected void appendTag(StringBuilder stringBuilder, int tag, String value) throws FixMessageMisconfiguredException {
-        if (value.isEmpty())
+        if (Objects.isNull(value) || value.isEmpty())
             throw new FixMessageMisconfiguredException("Missing value for tag: " + tag);
         stringBuilder.append(tag).append("=").append(value).append("\u0001");
     }
