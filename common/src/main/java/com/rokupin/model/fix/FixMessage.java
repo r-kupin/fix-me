@@ -6,18 +6,18 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class FixMessage implements Serializable {
-    protected static final int TAG_STOCK_STATE_JSON = 0;
-    protected static final int TAG_BEGIN_STRING = 8;
-    protected static final int TAG_CHECKSUM = 10;
-    protected static final int TAG_MSG_TYPE = 35;
-    protected static final int TAG_ORDER_QTY = 38;
-    protected static final int TAG_SOURCE_COMP_ID = 49;
-    protected static final int TAG_SOURCE_SUB_ID = 50;
-    protected static final int TAG_SIDE = 54;
-    protected static final int TAG_SYMBOL = 55;
-    protected static final int TAG_TARGET_COMP_ID = 56;
-    protected static final int TAG_TARGET_SUB_ID = 57;
-    protected static final int TAG_ORD_REJ_REASON = 103;
+    public static final int TAG_STOCK_STATE_JSON = 0;
+    public static final int TAG_BEGIN_STRING = 8;
+    public static final int TAG_CHECKSUM = 10;
+    public static final int TAG_MSG_TYPE = 35;
+    public static final int TAG_ORDER_QTY = 38;
+    public static final int TAG_SOURCE_COMP_ID = 49;
+    public static final int TAG_SOURCE_SUB_ID = 50;
+    public static final int TAG_SIDE = 54;
+    public static final int TAG_SYMBOL = 55;
+    public static final int TAG_TARGET_COMP_ID = 56;
+    public static final int TAG_TARGET_SUB_ID = 57;
+    public static final int TAG_ORD_REJ_REASON = 103;
 
     public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws FixMessageMisconfiguredException {
         Map<Integer, String> fixFields = Arrays.stream(fixMessage.split("\u0001"))
@@ -29,7 +29,11 @@ public abstract class FixMessage implements Serializable {
                 ));
 
         message.parseFields(fixFields);
-        message.validate();
+        message.validateFields();
+        // get checksum from input msg
+        int checksum = Integer.parseInt(getRequiredField(fixFields, TAG_CHECKSUM));
+        // calculate checksum of provided fields and compare
+        message.validateChecksum(checksum);
         return message;
     }
 
@@ -45,16 +49,23 @@ public abstract class FixMessage implements Serializable {
 
     protected abstract void appendFields(StringBuilder fixMessage) throws FixMessageMisconfiguredException;
 
-    protected void validate() throws FixMessageMisconfiguredException {
+    protected abstract void validateFields() throws FixMessageMisconfiguredException;
+    protected void validateChecksum(int checksum) throws FixMessageMisconfiguredException {
+        // calculate checksum independently and match results
+        if (calculateChecksum(messageWithoutChecksum().toString()) != checksum)
+            throw new FixMessageMisconfiguredException("Checksum doesn't match");
     }
 
-    public String asFix() throws FixMessageMisconfiguredException {
+    protected StringBuilder messageWithoutChecksum() throws FixMessageMisconfiguredException {
         StringBuilder fixMessage = new StringBuilder();
 
         appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
         appendFields(fixMessage);
+        return fixMessage;
+    }
 
-        // Calculate checksum
+    public String asFix() throws FixMessageMisconfiguredException {
+        StringBuilder fixMessage = messageWithoutChecksum();
         int checksum = calculateChecksum(fixMessage.toString());
         appendTag(fixMessage, TAG_CHECKSUM, String.format("%03d", checksum));
 

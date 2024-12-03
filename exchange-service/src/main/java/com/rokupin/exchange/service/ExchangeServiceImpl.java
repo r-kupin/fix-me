@@ -138,42 +138,45 @@ public class ExchangeServiceImpl {
     }
 
     public Mono<FixResponse> processTradeRequest(FixRequest request) {
-        FixResponse response = new FixResponse(
-                assignedId,                 // sender
-                request.getSender(),        // receiving service id
-                request.getSenderSubId(),   // receiving client id
-                request.getInstrument(),
-                request.getAction(),
-                request.getAmount(),
-                FixResponse.MSG_ORD_FILLED,
-                FixResponse.UNSPECIFIED
-        );
-        return stockRepo.findByName(request.getInstrument())
-                .flatMap(entry -> {
-                    if (request.getAction() == FixRequest.SIDE_BUY &&
-                            entry.amount() >= request.getAmount()) {
-                        return updateStockQuantity(entry, entry.amount() - request.getAmount())
-                                .thenReturn(response);
-                    } else if (request.getAction() == FixRequest.SIDE_SELL) {
-                        return updateStockQuantity(entry, entry.amount() + request.getAmount())
-                                .thenReturn(response);
-                    } else {
+        try {
+            FixResponse response = new FixResponse(
+                    assignedId,                 // sender
+                    request.getSender(),        // receiving service id
+                    request.getSenderSubId(),   // receiving client id
+                    request.getInstrument(),
+                    request.getAction(),
+                    request.getAmount(),
+                    FixResponse.MSG_ORD_FILLED,
+                    FixResponse.UNSPECIFIED
+            );
+            return stockRepo.findByName(request.getInstrument())
+                    .flatMap(entry -> {
+                        if (request.getAction() == FixRequest.SIDE_BUY &&
+                                entry.amount() >= request.getAmount()) {
+                            return updateStockQuantity(entry, entry.amount() - request.getAmount())
+                                    .thenReturn(response);
+                        } else if (request.getAction() == FixRequest.SIDE_SELL) {
+                            return updateStockQuantity(entry, entry.amount() + request.getAmount())
+                                    .thenReturn(response);
+                        } else {
+                            response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                            response.setRejectionReason(FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT);
+                            return Mono.just(response);
+                        }
+                    }).switchIfEmpty(Mono.defer(() -> {
                         response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
-                        response.setRejectionReason(FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT);
+                        response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
                         return Mono.just(response);
-                    }
-                }).switchIfEmpty(Mono.defer(() -> {
-                    response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
-                    response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
-                    return Mono.just(response);
-                }));
+                    }));
+        } catch (FixMessageMisconfiguredException e) {
+            log.error("Response creation failed: '{}'", e.getMessage());
+            return Mono.empty();
+        }
     }
 
     private Mono<InstrumentEntry> updateStockQuantity(InstrumentEntry entry, int updatedAmount) {
         InstrumentEntry updatedEntry = new InstrumentEntry(
-                entry.id(),
-                entry.name(),
-                updatedAmount
+                entry.id(), entry.name(), updatedAmount
         );
         return stockRepo.save(updatedEntry);
     }
