@@ -10,15 +10,20 @@ spring:
     gateway:
       routes:
         - id: broker-service
-          uri: lb://broker-service # Use Eureka for load-balancing
+          uri: lb://broker-service
           predicates:
             - Path=/ws/**
           filters:
-            - StripPrefix=0 # Remove `/ws` before forwarding to broker
+            - StripPrefix=0
           metadata:
-            websocket: true # Enable WebSocket routing
+            websocket: true
 
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
+
+logging:
+  level:
+    com.netflix.discovery: WARN
+    com.netflix.eureka: WARN

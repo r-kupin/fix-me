@@ -183,8 +183,7 @@ public class FixTradeWebSocketHandlerTest {
         return requestJson;
     }
 
-    private FixResponse updateMockStock(Map<String,
-            Map<String, Integer>> stocks,
+    private FixResponse updateMockStock(Map<String, Map<String, Integer>> stocks,
                                         FixRequest request) {
         lock.writeLock().lock();
         try {

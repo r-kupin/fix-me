@@ -86,7 +86,6 @@ services:
       args:
         DB_USERNAME: ${DB_ADDITIONAL_USERNAME}
         DB_PASSWORD: ${DB_ADDITIONAL_PASSWORD}
-    env_file: .env
     environment:
       - ROUTER_HOST=router-service
       - ROUTER_EXCHANGE_PORT=5001
@@ -109,7 +108,6 @@ services:
       args:
         DB_USERNAME: ${DB_DEFAULT_USERNAME}
         DB_PASSWORD: ${DB_DEFAULT_PASSWORD}
-    env_file: .env
     environment:
       - ROUTER_HOST=router-service
       - ROUTER_EXCHANGE_PORT=5001

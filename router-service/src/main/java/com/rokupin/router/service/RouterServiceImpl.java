@@ -158,7 +158,7 @@ public class RouterServiceImpl {
 
             log.debug("Sending trading response to '{}'", response.getTarget());
             if (!stateModified)
-                return forwardResponseToTargetBroker(connection.outbound(), input);
+                return forwardResponseToTargetBroker(connection.outbound(), response.getTarget(), input);
             return sendStateUpdateWithResponse(response, connection, input);
         } catch (FixMessageMisconfiguredException e) {
             log.error("Unsupported inbound traffic format: {}", e.getMessage());
@@ -173,7 +173,8 @@ public class RouterServiceImpl {
 
         return Flux.concat(
                 broadcastToBrokers(response.getTarget(), broadcastMessage),
-                forwardResponseToTargetBroker(brokerConnection.outbound(), input)
+                forwardResponseToTargetBroker(
+                        brokerConnection.outbound(), response.getTarget(), input)
         ).then();
     }
 
@@ -182,32 +183,31 @@ public class RouterServiceImpl {
     private Mono<Void> broadcastToBrokers(String excludeTarget, String message) {
         return Flux.fromIterable(brokerConnections.entrySet())
                 .filter(entry -> !entry.getKey().equals(excludeTarget))
-                .flatMap(entry -> {
-                    log.debug("Sending state to {}", entry.getKey());
-                    Connection connection = entry.getValue();
-                    return connection.outbound()
-                            .sendString(Mono.just(message), StandardCharsets.UTF_8)
-                            .then()
-                            .doOnError(e -> log.warn("Failed to send state"));
-                }).then();
+                .flatMap(entry -> forwardResponseToTargetBroker(
+                        entry.getValue().outbound(), entry.getKey(), message)
+                ).then();
     }
 
     private Mono<Void> broadcastToBrokers(String message) {
         return Flux.fromIterable(brokerConnections.entrySet())
-                .flatMap(entry -> {
-                    log.debug("Sending state to {}", entry.getKey());
-                    Connection connection = entry.getValue();
-                    return connection.outbound()
-                            .sendString(Mono.just(message), StandardCharsets.UTF_8)
-                            .then()
-                            .doOnError(e -> log.warn("Failed to send state"));
-                }).then();
+                .flatMap(entry -> forwardResponseToTargetBroker(
+                        entry.getValue().outbound(), entry.getKey(), message)
+                ).then();
     }
 
-    private Mono<Void> forwardResponseToTargetBroker(NettyOutbound outbound, String message) {
+    private Mono<Void> forwardResponseToTargetBroker(NettyOutbound outbound,
+                                                     String brokerId,
+                                                     String message) {
+        log.debug("Sending '{}' to {}", message, brokerId);
+
         return outbound.sendString(Mono.just(message), StandardCharsets.UTF_8)
                 .then()
-                .doOnError(e -> log.warn("Failed to forward trading response"));
+                .onErrorResume(e -> {
+                    log.warn("Failed to send to {}. Removing connection: {}",
+                            brokerId, e.getMessage());
+                    brokerConnections.remove(brokerId);
+                    return Mono.empty();
+                });
     }
 
 // ---------------- DB cache update
@@ -316,7 +316,8 @@ public class RouterServiceImpl {
     private Mono<Void> handleBrokerCommunicationError(Throwable throwable, NettyOutbound outbound) {
         if (throwable instanceof ConnectivityException e ) {
             log.debug("Sending fix error message: '{}'", e.getMessage());
-            return forwardResponseToTargetBroker(outbound, e.getMessage());
+            return forwardResponseToTargetBroker(
+                    outbound, "Can't get ID at this point", e.getMessage());
         }
         log.warn("Broker service communication went wrong '{}'", throwable.getMessage());
         return Mono.empty();

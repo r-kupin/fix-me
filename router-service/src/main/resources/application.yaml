@@ -28,3 +28,5 @@ eureka:
 logging:
   level:
     com.rokupin.router: DEBUG
+    com.netflix.discovery: WARN
+    com.netflix.eureka: WARN
