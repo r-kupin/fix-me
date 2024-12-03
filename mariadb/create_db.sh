@@ -13,11 +13,39 @@ if [ ! -d "/var/lib/mysql/${DB_DEFAULT_NAME}" ]; then
         CREATE USER '${DB_DEFAULT_USERNAME}'@'%' IDENTIFIED BY '${DB_DEFAULT_PASSWORD}';
         GRANT ALL PRIVILEGES ON ${DB_DEFAULT_NAME}.* TO '${DB_DEFAULT_USERNAME}'@'%';
         FLUSH PRIVILEGES;
+
+        USE ${DB_DEFAULT_NAME};
+        CREATE TABLE stock
+        (
+            id     INT         NOT NULL AUTO_INCREMENT,
+            name   VARCHAR(60) NOT NULL,
+            amount INT         NOT NULL,
+            UNIQUE (name),
+            PRIMARY KEY (id)
+        );
+        insert into stock (id, name, amount)
+        values (1, 'TEST1', 1);
+        insert into stock (id, name, amount)
+        values (2, 'TEST2', 2);
+
+        USE mysql;
+        CREATE DATABASE ${DB_ADDITIONAL_NAME} CHARACTER SET utf8 COLLATE utf8_general_ci;
+        CREATE USER '${DB_ADDITIONAL_USERNAME}'@'%' IDENTIFIED BY '${DB_ADDITIONAL_PASSWORD}';
+        GRANT ALL PRIVILEGES ON ${DB_ADDITIONAL_NAME}.* TO '${DB_ADDITIONAL_USERNAME}'@'%';
+        FLUSH PRIVILEGES;
+
+        USE ${DB_ADDITIONAL_NAME};
+        CREATE TABLE stock
+        (
+            id     INT         NOT NULL AUTO_INCREMENT,
+            name   VARCHAR(60) NOT NULL,
+            amount INT         NOT NULL,
+            UNIQUE (name),
+            PRIMARY KEY (id)
+        );
+        insert into stock (id, name, amount)
+        values (1, 'TEST3', 3);
+        insert into stock (id, name, amount)
+        values (2, 'TEST4', 4);
 EOSQL
 fi
-#DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-
-#        CREATE DATABASE stock_2_db CHARACTER SET utf8 COLLATE utf8_general_ci;
-#        CREATE USER 'stock_2_db_service'@'%' IDENTIFIED BY 'stock_2_db_service_pass';
-#        GRANT ALL PRIVILEGES ON stock_2_db.* TO 'stock_2_db_service'@'%';
-#        FLUSH PRIVILEGES;

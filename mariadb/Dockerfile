@@ -2,9 +2,14 @@ FROM alpine:latest
 
 ARG DB_PORT
 ARG DB_ADMIN_PASSWORD
+
 ARG DB_DEFAULT_USERNAME
 ARG DB_DEFAULT_PASSWORD
 ARG DB_DEFAULT_NAME
+
+ARG DB_ADDITIONAL_USERNAME
+ARG DB_ADDITIONAL_PASSWORD
+ARG DB_ADDITIONAL_NAME
 
 RUN apk update && apk add --no-cache mariadb mariadb-client
 
@@ -19,7 +24,7 @@ RUN mysql_install_db --user=mysql --datadir=/var/lib/mysql
 COPY create_db.sh .
 RUN sh create_db.sh && rm -f /*.sh
 
-COPY init.sql /docker-entrypoint-initdb.d/
+#COPY init.sql /docker-entrypoint-initdb.d/
 
 EXPOSE $DB_PORT
 

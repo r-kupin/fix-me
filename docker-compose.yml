@@ -9,6 +9,9 @@ services:
         DB_DEFAULT_USERNAME: ${DB_DEFAULT_USERNAME}
         DB_DEFAULT_PASSWORD: ${DB_DEFAULT_PASSWORD}
         DB_DEFAULT_NAME: ${DB_DEFAULT_NAME}
+        DB_ADDITIONAL_USERNAME: ${DB_ADDITIONAL_USERNAME}
+        DB_ADDITIONAL_PASSWORD: ${DB_ADDITIONAL_PASSWORD}
+        DB_ADDITIONAL_NAME: ${DB_ADDITIONAL_NAME}
     ports:
       - "${DB_PORT}:${DB_PORT}"
     networks:
@@ -77,9 +80,35 @@ services:
       restart_policy:
         condition: on-failure
 
-  exchange-service:
+  exchange-service-2:
     build:
       context: exchange-service
+      args:
+        DB_USERNAME: ${DB_ADDITIONAL_USERNAME}
+        DB_PASSWORD: ${DB_ADDITIONAL_PASSWORD}
+    env_file: .env
+    environment:
+      - ROUTER_HOST=router-service
+      - ROUTER_EXCHANGE_PORT=5001
+      - DB_URL=r2dbc:mariadb://mariadb:3306/${DB_ADDITIONAL_NAME}
+      - EUREKA_URI=http://eureka-server:8761/eureka/
+    networks:
+      - fix-me-network
+    depends_on:
+      - mariadb
+      - router-service
+      - eureka-server
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  exchange-service-1:
+    build:
+      context: exchange-service
+      args:
+        DB_USERNAME: ${DB_DEFAULT_USERNAME}
+        DB_PASSWORD: ${DB_DEFAULT_PASSWORD}
     env_file: .env
     environment:
       - ROUTER_HOST=router-service
@@ -115,19 +144,6 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
-
-  exchange-service-new:
-    build:
-      context: exchange-service
-    environment:
-      - ROUTER_HOST=router-service
-      - ROUTER_EXCHANGE_PORT=5001
-      - DB_URL=r2dbc:mariadb://mariadb:3306/stock_2_db
-      - DB_USERNAME=stock_2_db_service
-      - DB_PASSWORD=stock_2_db_service_pass
-      - EUREKA_URI=http://eureka-server:8761/eureka/
-    networks:
-      - fix-me-network
 
 networks:
   fix-me-network:
