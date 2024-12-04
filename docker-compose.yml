@@ -1,14 +1,27 @@
+x-common-environment: &common-environment
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
+  EUREKA_HOST: ${EUREKA_HOST}
+  EUREKA_PORT: ${EUREKA_PORT}
+  ROUTER_HOST: ${ROUTER_HOST}
+  ROUTER_EXCHANGE_PORT: ${ROUTER_EXCHANGE_PORT}
+  ROUTER_BROKER_PORT: ${ROUTER_BROKER_PORT}
+  GATEWAY_PORT: ${GATEWAY_PORT}
+  EUREKA_URI: ${EUREKA_URI}
+  DB_NAME: ${DB_NAME}
+
 services:
   mariadb:
     build:
       context: mariadb
       dockerfile: Dockerfile
       args:
-        DB_PORT: ${DB_PORT}
         DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD}
         DB_USERNAME: ${DB_USERNAME}
         DB_PASSWORD: ${DB_PASSWORD}
         DB_NAME: ${DB_NAME}
+    environment:
+      <<: *common-environment
     ports:
       - "${DB_PORT}:${DB_PORT}"
     networks:
@@ -26,8 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: eureka-server
     environment:
-      - EUREKA_PORT=${EUREKA_PORT}
-      - EUREKA_HOST=eureka-server
+      <<: *common-environment
     ports:
       - "${EUREKA_PORT}:${EUREKA_PORT}"
     networks:
@@ -47,10 +59,7 @@ services:
       context: router-service
     container_name: router-service
     environment:
-      - ROUTER_HOST=router-service
-      - ROUTER_BROKER_PORT=5000
-      - ROUTER_EXCHANGE_PORT=5001
-      - EUREKA_URI=http://eureka-server:8761/eureka/
+      <<: *common-environment
     networks:
       - fix-me-network
     depends_on:
@@ -65,11 +74,7 @@ services:
     build:
       context: broker-service
     environment:
-      - ROUTER_HOST=router-service
-      - ROUTER_BROKER_PORT=5000
-      - SERVER_LISTEN_PORT=8080
-      - SERVER_LISTEN_ADDR=broker-service
-      - EUREKA_URI=http://eureka-server:8761/eureka/
+        <<: *common-environment
     networks:
       - fix-me-network
     depends_on:
@@ -78,7 +83,7 @@ services:
       eureka-server:
           condition: service_healthy
     deploy:
-      replicas: 2
+      replicas: 1
       update_config:
         parallelism: 1
         delay: 10s
@@ -88,13 +93,11 @@ services:
   exchange-service:
     build:
       context: exchange-service
+      args:
+        DB_USERNAME: ${DB_USERNAME}
+        DB_PASSWORD: ${DB_PASSWORD}
     environment:
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - ROUTER_HOST=router-service
-      - ROUTER_EXCHANGE_PORT=5001
-      - DB_URL=r2dbc:mariadb://mariadb:3306/${DB_NAME}
-      - EUREKA_URI=http://eureka-server:8761/eureka/
+      <<: *common-environment
     networks:
       - fix-me-network
     depends_on:
@@ -114,8 +117,7 @@ services:
       context: gateway-service
     container_name: gateway-service
     environment:
-      - SERVER_LISTEN_PORT=${GATEWAY_PORT}
-      - EUREKA_URI=http://eureka-server:${EUREKA_PORT}/eureka/
+      <<: *common-environment
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     networks:
@@ -133,5 +135,6 @@ services:
 networks:
   fix-me-network:
     driver: bridge
+
 volumes:
   mariadb_volume:

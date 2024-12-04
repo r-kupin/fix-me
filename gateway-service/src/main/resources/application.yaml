@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_LISTEN_PORT:8084}
+  port: ${GATEWAY_PORT:8084}
 
 spring:
   application:
