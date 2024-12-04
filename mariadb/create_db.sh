@@ -1,5 +1,6 @@
 #!/bin/sh
 
+
 if [ ! -d "/var/lib/mysql/${DB_NAME}" ]; then
     /usr/bin/mysqld --user=mysql --bootstrap <<-EOSQL
         USE mysql;

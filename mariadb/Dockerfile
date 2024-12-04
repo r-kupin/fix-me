@@ -1,5 +1,10 @@
 FROM alpine:latest
 
+ARG DB_ADMIN_PASSWORD
+ARG DB_USERNAME
+ARG DB_PASSWORD
+ARG DB_NAME
+
 RUN apk update && apk add --no-cache mariadb mariadb-client
 
 COPY docker.cnf /etc/my.cnf.d/
@@ -11,7 +16,8 @@ RUN mkdir -p /var/run/mysqld && \
 RUN mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
 COPY create_db.sh .
-RUN sh create_db.sh && rm -f /*.sh
+COPY add_new_exchange_db.sh .
+RUN sh create_db.sh && rm -f create_db.sh
 
 #COPY init.sql /docker-entrypoint-initdb.d/
 
