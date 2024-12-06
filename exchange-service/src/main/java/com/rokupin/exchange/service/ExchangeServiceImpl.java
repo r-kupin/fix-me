@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.exchange.model.InstrumentEntry;
 import com.rokupin.exchange.repo.StockRepo;
 import com.rokupin.model.fix.*;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 import reactor.netty.tcp.TcpClient;
@@ -26,6 +26,9 @@ public class ExchangeServiceImpl {
     private final StockRepo stockRepo;
     private final Connection connection;
     private final ObjectMapper objectMapper;
+    private final FixMessageProcessor routerInputProcessor;
+
+    public final int MAX_AMOUNT = 1_000_000_000;
 
     private String assignedId;
 
@@ -34,16 +37,41 @@ public class ExchangeServiceImpl {
                                @Value("${tcp.port}") int port) {
         this.objectMapper = objectMapper;
         this.stockRepo = stockRepo;
+        this.routerInputProcessor = new FixMessageProcessor();
         this.connection = connectTcpClient(host, port);
     }
 
+    @PostConstruct
+    private void checkDB() {
+        Long instruments_amount = stockRepo.count().block();
+        if (Objects.nonNull(instruments_amount) && instruments_amount < 1) {
+            log.error("Database is empty, nothing to trade");
+            System.exit(1);
+        }
+        InstrumentEntry record = stockRepo.findAll()
+                .filter(entry ->
+                        entry.amount() > MAX_AMOUNT || entry.amount() < 0
+                ).next()
+                .block();
+        if (Objects.nonNull(record)) {
+            log.error("Instrument {} amount of {} is unacceptable. " +
+                            "Amount should be from 0 to {}."
+                    , record.name(), record.amount(), MAX_AMOUNT);
+            System.exit(1);
+        }
+    }
+
     private Connection connectTcpClient(String host, int port) {
+
         TcpClient client = TcpClient.create()
                 .host(host)
                 .port(port)
+                .doOnConnect(con -> routerInputProcessor.getFlux()
+                        .flatMap(this::handleIncomingMessage)
+                        .subscribe())
                 .handle((inbound, outbound) -> inbound.receive()
                         .asString(StandardCharsets.UTF_8)
-                        .flatMap(this::handleIncomingData)
+                        .doOnNext(routerInputProcessor::processInput)
                         .then());
 
         return client.connect()
@@ -60,12 +88,6 @@ public class ExchangeServiceImpl {
                         signal.totalRetriesInARow() + 1))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
                         new RuntimeException("Max retry attempts reached."));
-    }
-
-    private Mono<Void> handleIncomingData(String data) {
-        return Flux.fromIterable(FixMessage.splitFixMessages(data))
-                .flatMap(this::handleIncomingMessage)
-                .then();
     }
 
     private Mono<Void> handleIncomingMessage(String msg) {
@@ -150,20 +172,8 @@ public class ExchangeServiceImpl {
                     FixResponse.UNSPECIFIED
             );
             return stockRepo.findByName(request.getInstrument())
-                    .flatMap(entry -> {
-                        if (request.getAction() == FixRequest.SIDE_BUY &&
-                                entry.amount() >= request.getAmount()) {
-                            return updateStockQuantity(entry, entry.amount() - request.getAmount())
-                                    .thenReturn(response);
-                        } else if (request.getAction() == FixRequest.SIDE_SELL) {
-                            return updateStockQuantity(entry, entry.amount() + request.getAmount())
-                                    .thenReturn(response);
-                        } else {
-                            response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
-                            response.setRejectionReason(FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT);
-                            return Mono.just(response);
-                        }
-                    }).switchIfEmpty(Mono.defer(() -> {
+                    .flatMap(entry -> prepareResponse(entry, request, response))
+                    .switchIfEmpty(Mono.defer(() -> {
                         response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
                         response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
                         return Mono.just(response);
@@ -171,6 +181,36 @@ public class ExchangeServiceImpl {
         } catch (FixMessageMisconfiguredException e) {
             log.error("Response creation failed: '{}'", e.getMessage());
             return Mono.empty();
+        }
+    }
+
+    private Mono<FixResponse> prepareResponse(InstrumentEntry entry,
+                                              FixRequest request,
+                                              FixResponse response) {
+        if (request.getAction() == FixRequest.SIDE_BUY) {
+            if (entry.amount() >= request.getAmount()) {
+                return updateStockQuantity(entry,
+                        entry.amount() - request.getAmount()
+                ).thenReturn(response);
+            } else {
+                response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                response.setRejectionReason(FixResponse.EXCHANGE_LACKS_REQUESTED_AMOUNT);
+                return Mono.just(response);
+            }
+        } else if (request.getAction() == FixRequest.SIDE_SELL) {
+            if (entry.amount() + request.getAmount() <= MAX_AMOUNT) {
+                return updateStockQuantity(entry,
+                        entry.amount() + request.getAmount()
+                ).thenReturn(response);
+            } else {
+                response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+                response.setRejectionReason(FixResponse.TOO_MUCH);
+                return Mono.just(response);
+            }
+        } else {
+            response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+            response.setRejectionReason(FixResponse.ACTION_UNSUPPORTED);
+            return Mono.just(response);
         }
     }
 

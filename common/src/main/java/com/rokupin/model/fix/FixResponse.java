@@ -27,6 +27,8 @@ public class FixResponse extends FixMessage {
     public static final int EXCHANGE_IS_NOT_AVAILABLE = 2;
     public static final int INSTRUMENT_NOT_SUPPORTED = 3;
     public static final int EXCHANGE_LACKS_REQUESTED_AMOUNT = 4;
+    public static final int ACTION_UNSUPPORTED = 5;
+    public static final int TOO_MUCH = 6;
 
     private String msgType;         // MsgType (35)
     private String sender;          // SenderCompID (49)
@@ -110,9 +112,9 @@ public class FixResponse extends FixMessage {
                     "OrdStatus (39) should be 0 (New), 2 (Filled) or 8 (Rejected)." +
                             " Provided: '" + ordStatus + "'");
 
-        if (rejectionReason < 0 || rejectionReason > 5)
+        if (rejectionReason < 0 || rejectionReason > 6)
             throw new FixMessageMisconfiguredException(
-                    "OrdRejReason (103) should be >= 0 and <= 4 Provided: '" +
+                    "OrdRejReason (103) should be >= 0 and <= 6 Provided: '" +
                             rejectionReason + "'");
 
         if (!msgType.equals(MSG_EXECUTION_REPORT))
@@ -123,10 +125,12 @@ public class FixResponse extends FixMessage {
 
     public String getDescription() {
         return switch (rejectionReason) {
-            case 1 -> "Unsupported format";
-            case 2 -> "Target exchange is unavailable";
-            case 3 -> "Target exchange doesn't operate with requested instrument";
-            case 4 -> "Target exchange doesn't possess requested quantity";
+            case UNSUPPORTED_FORMAT -> "Unsupported format";
+            case EXCHANGE_IS_NOT_AVAILABLE -> "Target exchange is unavailable";
+            case INSTRUMENT_NOT_SUPPORTED -> "Target exchange doesn't operate with requested instrument";
+            case EXCHANGE_LACKS_REQUESTED_AMOUNT -> "Target exchange doesn't possess requested quantity";
+            case ACTION_UNSUPPORTED -> "Action (side) should be either 1 or 2";
+            case TOO_MUCH -> "Target exchange limits it's amount of the instrument being sold.";
             default -> "Reason unknown";
         };
     }
