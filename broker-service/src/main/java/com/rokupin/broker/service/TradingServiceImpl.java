@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.Connection;
@@ -39,6 +38,7 @@ public class TradingServiceImpl implements TradingService {
     private Sinks.Many<String> initialStateSink;
     private Connection connection;
     private String assignedId;
+    private final FixMessageProcessor routerInputProcessor;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
                               ObjectMapper objectMapper,
@@ -52,6 +52,7 @@ public class TradingServiceImpl implements TradingService {
         this.updateRequested = new AtomicBoolean(false);
         this.connectionInProgress = new AtomicBoolean(false);
         this.initialStateSink = Sinks.many().replay().all();
+        this.routerInputProcessor = new FixMessageProcessor();
     }
 
 // -------------------------- Connection to Router
@@ -60,9 +61,12 @@ public class TradingServiceImpl implements TradingService {
         TcpClient.create()
                 .host(host)
                 .port(port)
-                .handle((inbound, outbound) -> inbound.receive()
+                .doOnConnect(con -> routerInputProcessor.getFlux()
+                        .flatMap(this::handleIncomingMessage)
+                        .subscribe()
+                ).handle((inbound, outbound) -> inbound.receive()
                         .asString(StandardCharsets.UTF_8)
-                        .flatMap(this::handleIncomingData)
+                        .doOnNext(routerInputProcessor::processInput)
                         .then()
                 ).connect()
                 .retryWhen(retrySpec())
@@ -91,12 +95,6 @@ public class TradingServiceImpl implements TradingService {
     }
 
 // -------------------------- Events from Router processing
-
-    private Mono<Void> handleIncomingData(String data) {
-        return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
-                .flatMap(this::handleIncomingMessage) // Process each message individually
-                .then();
-    }
 
     private Mono<Void> handleIncomingMessage(String message) {
         log.debug("TCPService: processing message: '{}'", message);

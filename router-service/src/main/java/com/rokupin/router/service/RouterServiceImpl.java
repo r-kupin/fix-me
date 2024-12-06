@@ -30,6 +30,8 @@ public class RouterServiceImpl {
     private final Map<String, Map<String, Integer>> stateCache;
     private final Map<String, Connection> brokerConnections;
     private final Map<String, Connection> exchangeConnections;
+    private final FixMessageProcessor brokerInputProcessor;
+    private final FixMessageProcessor exchangeInputProcessor;
 
     int brokers, exchanges;
 
@@ -50,36 +52,48 @@ public class RouterServiceImpl {
         exchangeConnections = new ConcurrentHashMap<>();
         brokerServer = TcpServer.create().host(brokerHost).port(brokerPort);
         exchangeServer = TcpServer.create().host(exchangeHost).port(exchangePort);
+        exchangeInputProcessor = new FixMessageProcessor();
+        brokerInputProcessor = new FixMessageProcessor();
     }
 
     @PostConstruct
     private void init() {
-        brokerServer.doOnConnection(connection -> connection.outbound()
-                        .sendString(welcomeNewBroker(connection), StandardCharsets.UTF_8)
-                        .then()
-                        .subscribe()
-                ).handle((inbound, outbound) -> inbound.receive()
+        brokerServer.doOnConnection(connection -> {
+                    brokerInputProcessor.getFlux()
+                            .flatMap(this::handleBrokerInput)
+                            .onErrorResume(e -> handleBrokerCommunicationError(
+                                    e,
+                                    connection.outbound())
+                            ).subscribe();
+
+                    connection.outbound()
+                            .sendString(welcomeNewBroker(connection), StandardCharsets.UTF_8)
+                            .then()
+                            .subscribe();
+                }).handle((inbound, outbound) -> inbound.receive()
                         .asString(StandardCharsets.UTF_8)
-                        .flatMap(data -> Flux.fromIterable(FixMessage.splitFixMessages(data)))
-                        .flatMap(this::handleBrokerInput)
-                        .onErrorResume(e -> handleBrokerCommunicationError(e, outbound))
+                        .doOnNext(brokerInputProcessor::processInput)
                         .then()
                 ).bindNow()
                 .onDispose()
                 .subscribe();
 
-        exchangeServer.doOnConnection(connection -> connection.outbound()
-                        .sendString(welcomeNewExchange(connection), StandardCharsets.UTF_8)
-                        .then()
-                        .subscribe()
-                ).handle((inbound, outbound) -> inbound.receive()
+        exchangeServer.doOnConnection(connection -> {
+            exchangeInputProcessor.getFlux()
+                    .flatMap(this::handleExchangeInput)
+                    .doOnError(e -> log.error(
+                            "Exchange service interaction went wrong: {}",
+                            e.getMessage())
+                    ).subscribe();
+
+            connection.outbound()
+                    .sendString(welcomeNewExchange(connection), StandardCharsets.UTF_8)
+                    .then()
+                    .subscribe();
+        }).handle((inbound, outbound) -> inbound.receive()
                         .asString(StandardCharsets.UTF_8)
-                        .flatMap(data -> Flux.fromIterable(FixMessage.splitFixMessages(data)))
-                        .flatMap(this::handleExchangeInput)
-                        .doOnError(e -> log.error(
-                                "Exchange service interaction went wrong: {}",
-                                e.getMessage())
-                        ).then()
+                        .doOnNext(exchangeInputProcessor::processInput)
+                        .then()
                 ).bindNow()
                 .onDispose()
                 .subscribe();

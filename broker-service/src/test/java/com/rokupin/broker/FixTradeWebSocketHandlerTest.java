@@ -10,7 +10,6 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
 import org.springframework.web.reactive.socket.client.WebSocketClient;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.NettyOutbound;
@@ -32,6 +31,7 @@ public class FixTradeWebSocketHandlerTest {
     private TcpServer mockRouterServer;
     private URI brockerServiceWsUri;
     private final boolean[] clientSentRequest = {false, false, false, false};
+    private FixMessageProcessor fixMessageProcessor;
 
     @BeforeEach
     public void setup() {
@@ -39,6 +39,7 @@ public class FixTradeWebSocketHandlerTest {
         mockClient = new ReactorNettyWebSocketClient();
         mockRouterServer = TcpServer.create().host("localhost").port(5000);
         brockerServiceWsUri = URI.create("ws://localhost:" + port + "/ws/requests");
+        fixMessageProcessor = new FixMessageProcessor();
     }
 
     public Map<String, Map<String, Integer>> initStocksMock(String exchange1ID, String exchange2ID) {
@@ -99,10 +100,11 @@ public class FixTradeWebSocketHandlerTest {
                                           Map<String, Map<String, Integer>> stocks,
                                           String brokerID,
                                           NettyOutbound outbound) {
-        return Flux.fromIterable(FixMessage.splitFixMessages(data)) // Split into individual messages
-                .flatMap(msg -> processIncomingMessage(
-                        msg, stocks, brokerID, outbound
-                )).then();
+        return Mono.empty();
+//        return fixMessageProcessor.processInput(data) // Split into individual messages
+//                .flatMap(msg -> processIncomingMessage(
+//                        msg, stocks, brokerID, outbound
+//                )).then();
     }
 
     private Mono<Void> processIncomingMessage(String payload,
