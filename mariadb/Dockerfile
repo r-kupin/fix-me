@@ -19,8 +19,6 @@ COPY create_db.sh .
 COPY add_new_exchange_db.sh .
 RUN sh create_db.sh && rm -f create_db.sh
 
-#COPY init.sql /docker-entrypoint-initdb.d/
-
 EXPOSE $DB_PORT
 
 USER mysql
