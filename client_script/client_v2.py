@@ -23,10 +23,11 @@ def create_trade_request(target, instrument, action, amount):
 def random_string(length=5):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
+
 # 8=FIX.5.0|35=D|49=B00001|50=1|55=TEST2|54=1|38=1386809|56=E00000|10=166|
 # Asynchronous client simulator
-async def sync_trade_simulator(uri):
-    async with websockets.connect(uri) as websocket:
+async def sync_trade_simulator(uri_):
+    async with websockets.connect(uri_) as websocket:
         # Receive the initial market state
         initial_message = await websocket.recv()
         print("Received initial market state:")
@@ -66,8 +67,6 @@ async def sync_trade_simulator(uri):
                 exchange, instrument, available_quantity = random.choice(instruments)
                 action = random.choice(["buy", "sell"])
                 amount = random.randint(1, 100)
-                if action == "buy" and available_quantity < 1:
-                    action = "sell"
 
 
             # Create and send the request

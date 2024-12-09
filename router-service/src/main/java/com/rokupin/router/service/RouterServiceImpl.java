@@ -29,12 +29,6 @@ public class RouterServiceImpl {
     private final String id;
     private final Map<String, Map<String, Integer>> stateCache;
     private final CommunicationKit communicationKit;
-
-//    private final Map<String, Connection> brokerConnections;
-//    private final Map<String, Connection> exchangeConnections;
-//    private final FixMessageProcessor brokerInputProcessor;
-//    private final FixMessageProcessor exchangeInputProcessor;
-
     int brokers, exchanges;
 
     public RouterServiceImpl(CommunicationKit communicationKit,
@@ -49,16 +43,9 @@ public class RouterServiceImpl {
         this.objectMapper = objectMapper;
         this.communicationKit = communicationKit;
 
-        brokers = 0;
-        exchanges = 0;
         stateCache = new ConcurrentHashMap<>();
         brokerServer = TcpServer.create().host(brokerHost).port(brokerPort);
         exchangeServer = TcpServer.create().host(exchangeHost).port(exchangePort);
-
-//        brokerConnections = new ConcurrentHashMap<>();
-//        exchangeConnections = new ConcurrentHashMap<>();
-//        exchangeInputProcessor = new FixMessageProcessor();
-//        brokerInputProcessor = new FixMessageProcessor();
     }
 
     private void doOnBrokerConnection(Connection connection) {
@@ -72,70 +59,29 @@ public class RouterServiceImpl {
         } catch (JsonProcessingException e) {
             log.error("Cant serialize cache map");
         }
-
-//                    brokerInputProcessor.getFlux()
-//                            .flatMap(this::handleBrokerInput)
-//                            .onErrorResume(e -> handleBrokerCommunicationError(
-//                                    e,
-//                                    connection.outbound())
-//                            ).subscribe();
-//
-//                    connection.outbound()
-//                            .sendString(welcomeNewBroker(connection), StandardCharsets.UTF_8)
-//                            .then()
-//                            .subscribe();
-
     }
 
     private void doOnExchangeConnection(Connection connection) {
         communicationKit.newExchangeConnection(connection, this::handleExchangeInput);
-//                    exchangeInputProcessor.getFlux()
-//                            .flatMap(this::handleExchangeInput)
-//                            .doOnError(e -> log.error(
-//                                    "Exchange service interaction went wrong: {}",
-//                                    e.getMessage())
-//                            ).subscribe();
-//
-//                    connection.outbound()
-//                            .sendString(welcomeNewExchange(connection), StandardCharsets.UTF_8)
-//                            .then()
-//                            .subscribe();
-
     }
 
 
     @PostConstruct
     private void init() {
         brokerServer.doOnConnection(this::doOnBrokerConnection)
-                .doOnConnection(
-                        new BrokerOnConnectionHandler(communicationKit))
+                .doOnConnection(new BrokerOnConnectionHandler(communicationKit))
                 .bindNow()
                 .onDispose()
                 .subscribe();
 
         exchangeServer.doOnConnection(this::doOnExchangeConnection)
-                .doOnConnection(
-                        new ExchangeOnConnectionHandler(communicationKit)
-                ).bindNow()
+                .doOnConnection(new ExchangeOnConnectionHandler(communicationKit))
+                .bindNow()
                 .onDispose()
                 .subscribe();
     }
 
 // -------------------------- Exchange connectivity
-
-//    private Mono<String> welcomeNewExchange(Connection connection) {
-//        try {
-//            String newId = "E" + String.format("%05d", exchanges++);
-//            FixIdAssignation msg = new FixIdAssignation(id, newId);
-//            exchangeConnections.put(newId, connection);
-//            log.debug("New exchange '{}' connected", newId);
-//            return Mono.just(msg.asFix());
-//        } catch (FixMessageMisconfiguredException e) {
-//            log.error("Cant make an exchange welcome string: {}",
-//                    e.getMessage());
-//        }
-//        return Mono.empty();
-//    }
 
     private Mono<Void> handleExchangeInput(String input) {
         log.debug("Received '{}' from exchange", input);
@@ -290,45 +236,52 @@ public class RouterServiceImpl {
     }
 
 // -------------------------- Broker connectivity
-//
-//    private Mono<String> welcomeNewBroker(Connection connection) {
-//        try {
-//            String newId = "B" + String.format("%05d", brokers++);
-//            FixIdAssignationStockState msg = new FixIdAssignationStockState(
-//                    id, newId, objectMapper.writeValueAsString(stateCache)
-//            );
-//            brokerConnections.put(newId, connection);
-//            log.debug("New broker '{}' connected", newId);
-//            return Mono.just(msg.asFix());
-//        } catch (FixMessageMisconfiguredException e) {
-//            log.error("Cant make an broker welcome string: {}", e.getMessage());
-//        } catch (JsonProcessingException e) {
-//            log.error("Cant serialize cache map");
-//        }
-//        return Mono.empty();
-//    }
-
     private Mono<Void> handleBrokerInput(String input) {
         log.debug("Received '{}' from broker", input);
         try {
-            FixRequest request = FixMessage.fromFix(input, new FixRequest());
-
-//            Connection exchangeConnection = exchangeConnections.get(request.getTarget());
-            Connection exchangeConnection = communicationKit.getExchangeConnection(request.getTarget());
-            if (Objects.nonNull(exchangeConnection)) {
-                return exchangeConnection.outbound()
-                        .sendString(Mono.just(input), StandardCharsets.UTF_8)
-                        .then()
-                        .onErrorResume(e -> handleTradingResponseMsg(
-                                makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE)));
-            } else {
-                log.warn("Target exchange {} is unavailable", request.getTarget());
-                String fixMsg = makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE);
-                return Mono.error(new ConnectivityException(fixMsg));
-            }
+            return handleTradingRequest(input);
         } catch (FixMessageMisconfiguredException e) {
-            log.warn("Unsupported broker input format: {}", e.getMessage());
+            try {
+                return handleUpdateRequest(input);
+            } catch (FixMessageMisconfiguredException ex) {
+                log.warn("Unsupported broker input format: {}", e.getMessage());
+                return Mono.empty();
+            }
+        }
+    }
+
+    private Mono<Void> handleUpdateRequest(String input) throws FixMessageMisconfiguredException {
+        FixStateUpdateRequest request = FixMessage.fromFix(input, new FixStateUpdateRequest());
+        String sender = request.getSender();
+        Connection brokerConnection = communicationKit.getBrokerConnection(sender);
+
+        if (Objects.nonNull(brokerConnection)) {
+            return forwardResponseToTargetBroker(
+                    brokerConnection.outbound(),
+                    sender,
+                    makeStateUpdateMsgString()
+            );
+        } else {
+            communicationKit.removeBroker(sender);
             return Mono.empty();
+        }
+    }
+
+    private Mono<Void> handleTradingRequest(String input) throws FixMessageMisconfiguredException {
+        FixRequest request = FixMessage.fromFix(input, new FixRequest());
+        String target = request.getTarget();
+        Connection exchangeConnection = communicationKit.getExchangeConnection(target);
+
+        if (Objects.nonNull(exchangeConnection)) {
+            return exchangeConnection.outbound()
+                    .sendString(Mono.just(input), StandardCharsets.UTF_8)
+                    .then()
+                    .onErrorResume(e -> handleTradingResponseMsg(
+                            makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE)));
+        } else {
+            log.warn("Target exchange {} is unavailable", target);
+            String fixMsg = makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE);
+            return Mono.error(new ExchangeConnectivityFailure(fixMsg));
         }
     }
 
@@ -351,7 +304,7 @@ public class RouterServiceImpl {
     }
 
     private Mono<Void> handleBrokerCommunicationError(Throwable throwable, NettyOutbound outbound) {
-        if (throwable instanceof ConnectivityException e) {
+        if (throwable instanceof ExchangeConnectivityFailure e) {
             log.debug("Sending fix error message: '{}'", e.getMessage());
             return forwardResponseToTargetBroker(
                     outbound, "Can't get ID at this point", e.getMessage());
