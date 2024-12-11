@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.model.fix.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -47,6 +48,21 @@ public class RouterServiceImpl {
         exchangeServer = TcpServer.create().host(exchangeHost).port(exchangePort);
     }
 
+    @PostConstruct
+    private void init() {
+        brokerServer.doOnConnection(this::doOnBrokerConnection)
+                .doOnConnection(new BrokerOnConnectionHandler(communicationKit))
+                .bindNow()
+                .onDispose()
+                .subscribe();
+
+        exchangeServer.doOnConnection(this::doOnExchangeConnection)
+                .doOnConnection(new ExchangeOnConnectionHandler(communicationKit))
+                .bindNow()
+                .onDispose()
+                .subscribe();
+    }
+
     private void doOnBrokerConnection(Connection connection) {
         try {
             String state = objectMapper.writeValueAsString(stateCache);
@@ -64,25 +80,9 @@ public class RouterServiceImpl {
         communicationKit.newExchangeConnection(connection, this::handleExchangeInput);
     }
 
-
-    @PostConstruct
-    private void init() {
-        brokerServer.doOnConnection(this::doOnBrokerConnection)
-                .doOnConnection(new BrokerOnConnectionHandler(communicationKit))
-                .bindNow()
-                .onDispose()
-                .subscribe();
-
-        exchangeServer.doOnConnection(this::doOnExchangeConnection)
-                .doOnConnection(new ExchangeOnConnectionHandler(communicationKit))
-                .bindNow()
-                .onDispose()
-                .subscribe();
-    }
-
 // -------------------------- Exchange connectivity
 
-    private Mono<Void> handleExchangeInput(String input) {
+    private Publisher<Void> handleExchangeInput(String input) {
         log.debug("Received '{}' from exchange", input);
         try {
             FixStockStateReport fix = FixMessage.fromFix(input, new FixStockStateReport());
@@ -97,11 +97,10 @@ public class RouterServiceImpl {
 
 // ---------------- Stock update message handling
 
-    private Mono<Void> handleStockStateMsg(FixStockStateReport stockState) throws JsonProcessingException {
+    private Publisher<Void> handleStockStateMsg(FixStockStateReport stockState) throws JsonProcessingException {
         ConcurrentHashMap<String, Integer> state = objectMapper.readValue(
-                stockState.getStockJson(),
-                new TypeReference<>() {
-                });
+                stockState.getStockJson(), new TypeReference<>() {}
+        );
 
         if (!state.isEmpty()) {
             updateStateFromUpdateMessage(stockState.getSender(), state);
@@ -127,7 +126,7 @@ public class RouterServiceImpl {
 
 // ---------------- Trading response handling
 
-    private Mono<Void> handleTradingResponseMsg(String input) {
+    private Publisher<Void> handleTradingResponseMsg(String input) {
         try {
             FixResponse response = FixMessage.fromFix(input, new FixResponse());
             boolean stateModified = updateStateFromTradingResponse(response);
@@ -138,43 +137,33 @@ public class RouterServiceImpl {
                 return Mono.empty();
             }
 
-            log.debug("Sending trading response to '{}'", response.getTarget());
-            if (!stateModified)
-                return forwardResponseToTargetBroker(connection.outbound(), response.getTarget(), input);
-            return sendStateUpdateWithResponse(response, connection, input);
+            Mono<Void> responseToBrokerPublisher = forwardResponseToTargetBroker(
+                    connection.outbound(),
+                    response.getTarget(),
+                    input
+            );
+
+            if (stateModified) {
+                return Flux.concat(
+                        responseToBrokerPublisher,
+                        broadcastToBrokers(makeStateUpdateMsgString())
+                );
+            } else {
+                return responseToBrokerPublisher;
+            }
         } catch (FixMessageMisconfiguredException e) {
             log.error("Unsupported inbound traffic format: {}", e.getMessage());
         }
         return Mono.empty();
     }
 
-    private Mono<Void> sendStateUpdateWithResponse(FixResponse response,
-                                                   Connection brokerConnection,
-                                                   String input) {
-        String broadcastMessage = makeStateUpdateMsgString();
-
-        return Flux.concat(
-                broadcastToBrokers(response.getTarget(), broadcastMessage),
-                forwardResponseToTargetBroker(
-                        brokerConnection.outbound(), response.getTarget(), input)
-        ).then();
-    }
-
 // ---------------- Sending data to brokers
 
-    private Mono<Void> broadcastToBrokers(String excludeTarget, String message) {
-        return Flux.fromIterable(communicationKit.allBrokerConnections())
-                .filter(entry -> !entry.getKey().equals(excludeTarget))
-                .flatMap(entry -> forwardResponseToTargetBroker(
-                        entry.getValue().outbound(), entry.getKey(), message)
-                ).then();
-    }
-
-    private Mono<Void> broadcastToBrokers(String message) {
+    private Publisher<Void> broadcastToBrokers(String message) {
         return Flux.fromIterable(communicationKit.allBrokerConnections())
                 .flatMap(entry -> forwardResponseToTargetBroker(
                         entry.getValue().outbound(), entry.getKey(), message)
-                ).then();
+                );
     }
 
     private Mono<Void> forwardResponseToTargetBroker(NettyOutbound outbound,
@@ -213,7 +202,7 @@ public class RouterServiceImpl {
     }
 
 // -------------------------- Broker connectivity
-    private Mono<Void> handleBrokerInput(String input) {
+    private Publisher<Void> handleBrokerInput(String input) {
         log.debug("Received '{}' from broker", input);
         try {
             return handleTradingRequest(input);
@@ -227,7 +216,7 @@ public class RouterServiceImpl {
         }
     }
 
-    private Mono<Void> handleUpdateRequest(String input) throws FixMessageMisconfiguredException {
+    private Publisher<Void> handleUpdateRequest(String input) throws FixMessageMisconfiguredException {
         FixStateUpdateRequest request = FixMessage.fromFix(input, new FixStateUpdateRequest());
         String sender = request.getSender();
         Connection brokerConnection = communicationKit.getBrokerConnection(sender);
@@ -244,7 +233,7 @@ public class RouterServiceImpl {
         }
     }
 
-    private Mono<Void> handleTradingRequest(String input) throws FixMessageMisconfiguredException {
+    private Publisher<Void> handleTradingRequest(String input) throws FixMessageMisconfiguredException {
         FixRequest request = FixMessage.fromFix(input, new FixRequest());
         String target = request.getTarget();
         Connection exchangeConnection = communicationKit.getExchangeConnection(target);
@@ -253,8 +242,12 @@ public class RouterServiceImpl {
             return exchangeConnection.outbound()
                     .sendString(Mono.just(input), StandardCharsets.UTF_8)
                     .then()
-                    .onErrorResume(e -> handleTradingResponseMsg(
-                            makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE)));
+                    .onErrorResume(e -> Mono.from(
+                            handleTradingResponseMsg(
+                                    makeFixResponseStr(
+                                            request,
+                                            FixResponse.EXCHANGE_IS_NOT_AVAILABLE
+                                    ))));
         } else {
             log.warn("Target exchange {} is unavailable", target);
             String fixMsg = makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE);

@@ -155,8 +155,10 @@ public class ExchangeServiceImpl {
                         log.debug("Sending response: {}", response.asFix());
                         Publisher<String> to_send;
                         if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
-                            to_send = Flux.concat(Mono.just(response.asFix()),
-                                    publishCurrentStockState());
+                            to_send = Flux.concat(
+                                    Mono.just(response.asFix()),
+                                    publishCurrentStockState()
+                            );
                         } else {
                             to_send = Mono.just(response.asFix());
                         }

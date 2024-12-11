@@ -6,6 +6,7 @@ import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixMessageProcessor;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -42,8 +43,8 @@ public class CommunicationKit {
 
     public void newBrokerConnection(Connection connection,
                                     String serializedState,
-                                    Function<String, Mono<Void>> handlerCallback,
-                                    BiFunction<Throwable, NettyOutbound, Mono<Void>> errorCallback) {
+                                    Function<String, Publisher<Void>> handlerCallback,
+                                    BiFunction<Throwable, NettyOutbound, Publisher<Void>> errorCallback) {
         String newBrokerId = "B" + String.format("%05d", brokers++);
 
         FixMessageProcessor brokerInputProcessor = new FixMessageProcessor();
@@ -78,7 +79,7 @@ public class CommunicationKit {
     }
 
     public void newExchangeConnection(Connection connection,
-                                      Function<String, Mono<Void>> handlerCallback) {
+                                      Function<String, Publisher<Void>> handlerCallback) {
         String newExchangeId = "E" + String.format("%05d", exchanges++);
 
         FixMessageProcessor exchangeInputProcessor = new FixMessageProcessor();

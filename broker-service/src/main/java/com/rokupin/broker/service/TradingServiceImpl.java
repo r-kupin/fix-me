@@ -33,7 +33,7 @@ public class TradingServiceImpl implements TradingService {
     private final AtomicBoolean connectionInProgress;
     private final AtomicBoolean updateRequested;
     // StockId : {Instrument : AmountAvailable}
-    private final Map<String, Map<String, Integer>> currentStockState;
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> currentStockState;
     private Sinks.Many<String> initialStateSink;
     private Connection connection;
     private String assignedId;
@@ -107,7 +107,7 @@ public class TradingServiceImpl implements TradingService {
                         FixMessage.fromFix(message, new FixResponse());
                 return updateStateOnResponse(response);
             } catch (FixMessageMisconfiguredException ex) {
-                try {
+                try { // received follow-up update
                     FixStockStateReport followUp =
                             FixMessage.fromFix(message, new FixStockStateReport());
                     return updateStateFollowing(followUp);
@@ -141,7 +141,7 @@ public class TradingServiceImpl implements TradingService {
         return Mono.empty();
     }
 
-    private void updateState(String stockId, Map<String, Integer> stockState) {
+    private void updateState(String stockId, ConcurrentHashMap<String, Integer> stockState) {
         if (currentStockState.containsKey(stockId)) {
             currentStockState.replace(stockId, stockState);
         } else {
@@ -153,8 +153,8 @@ public class TradingServiceImpl implements TradingService {
         try {
             ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> state =
                     objectMapper.readValue(stateReport.getStockJson(),
-                            new TypeReference<>() {
-                            });
+                            new TypeReference<>() {}
+                    );
             currentStockState.clear();
             state.forEach(this::updateState);
             publishCurrentStockState();
@@ -190,9 +190,6 @@ public class TradingServiceImpl implements TradingService {
                 if (assignedId.isEmpty())
                     return Mono.just("Trading request not sent:" +
                             " this broker service has no assigned ID");
-                if (!currentStockState.containsKey(tradeRequest.getTarget()))
-                    return Mono.just("Trading request not sent:" +
-                            " unknown destination");
                 tradeRequest.setSender(assignedId);
                 String fix = tradeRequest.asFix();
                 log.info("TCPService: sending message '{}'", fix);
@@ -227,7 +224,7 @@ public class TradingServiceImpl implements TradingService {
                 if (updateRequested.compareAndSet(false, true)) {
                     // Ask for initialisation
                     connection.outbound()
-                            .sendString(Mono.just("STATE_UPD"),
+                            .sendString(publishFixStateUpdateRequest(),
                                     StandardCharsets.UTF_8);
                 }
             } else {
@@ -241,16 +238,29 @@ public class TradingServiceImpl implements TradingService {
         return initialStateSink.asFlux().next();
     }
 
-// -------------------------- Util
+    // -------------------------- Util
+    private Mono<String> publishFixStateUpdateRequest() {
+        try {
+            return Mono.just(new FixStateUpdateRequest(assignedId).asFix());
+        } catch (FixMessageMisconfiguredException e) {
+            log.error("TCPService: can't make FixStateUpdateRequest");
+            return Mono.empty();
+        }
+    }
+
     private void publishCurrentStockState() {
-        publisher.publishEvent(new InputEvent<>(new StocksStateMessage(currentStockState)));
+        publisher.publishEvent(new InputEvent<>(
+                new StocksStateMessage(
+                        Map.copyOf(currentStockState))));
         log.debug("TCPService: published stock update event");
         updateRequested.set(false);
     }
 
     private String serializeCurrentState() {
         try {
-            return objectMapper.writeValueAsString(new StocksStateMessage(currentStockState));
+            return objectMapper.writeValueAsString(
+                    new StocksStateMessage(
+                            Map.copyOf(currentStockState)));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize currentStockState");
         }
