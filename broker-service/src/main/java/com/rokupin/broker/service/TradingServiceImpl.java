@@ -7,7 +7,6 @@ import com.rokupin.broker.events.InputEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -19,7 +18,6 @@ import reactor.util.retry.Retry;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -124,7 +122,7 @@ public class TradingServiceImpl implements TradingService {
     private Mono<Void> updateStateInitial(FixIdAssignationStockState initialMessage) {
         if (Objects.isNull(assignedId)) {
             try {
-                Map<String, Map<String, Integer>> stocksStateMessages =
+                ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> stocksStateMessages =
                         objectMapper.readValue(initialMessage.getStockJson(),
                                 new TypeReference<>() {});
                 currentStockState.clear();
@@ -147,14 +145,16 @@ public class TradingServiceImpl implements TradingService {
         if (currentStockState.containsKey(stockId)) {
             currentStockState.replace(stockId, stockState);
         } else {
-            currentStockState.put(stockId, new HashMap<>(stockState));
+            currentStockState.put(stockId, new ConcurrentHashMap<>(stockState));
         }
     }
 
     private Mono<Void> updateStateFollowing(FixStockStateReport stateReport) {
         try {
-            Map<String, Map<String, Integer>> state = objectMapper.readValue(
-                    stateReport.getStockJson(), new TypeReference<>() {});
+            ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> state =
+                    objectMapper.readValue(stateReport.getStockJson(),
+                            new TypeReference<>() {
+                            });
             currentStockState.clear();
             state.forEach(this::updateState);
             publishCurrentStockState();
@@ -165,82 +165,10 @@ public class TradingServiceImpl implements TradingService {
     }
 
     private Mono<Void> updateStateOnResponse(FixResponse response) {
-        String id = response.getSender();
-
-        if (!currentStockState.containsKey(id)) {
-            log.warn("TCPService: Response from unknown stock id: {}", id);
-            return publishResponseRequestUpdate(response);
-        }
-        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
-            Map<String, Integer> stock = currentStockState.get(id);
-            String instrument = response.getInstrument();
-
-            if (!stock.containsKey(instrument)) {
-                log.warn("TCPService: stock id: {} sent response on unknown " +
-                        "instrument: {}", id, instrument);
-                return publishResponseRequestUpdate(response);
-            } else if (response.getAction() == FixRequest.SIDE_BUY) {
-                return onBuySuccessResponse(instrument, response, stock);
-            } else if (response.getAction() == FixRequest.SIDE_SELL) {
-                return onSellSuccessResponse(instrument, response, stock);
-            } else {
-                log.warn("TCPService: Unexpected value of the 'Side (54)' tag {}",
-                        response);
-            }
-        } else if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
             currentStockState.remove(response.getSender());
-            return publishResponseAndStateUpdate(response);
+            publishCurrentStockState();
         }
-        publisher.publishEvent(new InputEvent<>(response));
-        return Mono.empty();
-    }
-
-    private Mono<Void> publishResponseRequestUpdate(FixResponse response) {
-        publisher.publishEvent(new InputEvent<>(response));
-        try {
-            return connection.outbound()
-                    .sendString(
-                            Mono.just(new FixStateUpdateRequest(
-                                    assignedId, "R00000").asFix())
-                    ).then();
-        } catch (FixMessageMisconfiguredException e) {
-            log.warn("Failed to make FixStateUpdateRequest msg");
-            return Mono.empty();
-        }
-    }
-
-    private Mono<Void> onBuySuccessResponse(String instrument,
-                                            FixResponse response,
-                                            Map<String, Integer> stock) {
-        int before = stock.get(instrument);
-        int after = before - response.getAmount();
-        if (after < 0) {
-            log.warn("TCPService: Remaining instrument amount can't be negative." +
-                            "stock response: '{}', current amount: {}",
-                    response.getAmount(), before);
-            return publishResponseRequestUpdate(response);
-        }
-        stock.replace(instrument, after);
-        return publishResponseAndStateUpdate(response);
-    }
-
-    private Mono<Void> onSellSuccessResponse(String instrument,
-                                             FixResponse response,
-                                             Map<String, Integer> stock) {
-        int before = stock.get(instrument);
-        int after = before + response.getAmount();
-        if (after > 1_000_000_000) {
-            log.warn("TCPService: Remaining instrument exceeds stock's maximum." +
-                            "stock response: '{}', current amount: {}",
-                    response, before);
-            return publishResponseRequestUpdate(response);
-        }
-        stock.replace(instrument, after);
-        return publishResponseAndStateUpdate(response);
-    }
-
-    private @NotNull Mono<Void> publishResponseAndStateUpdate(FixResponse response) {
-        publishCurrentStockState();
         publisher.publishEvent(new InputEvent<>(response));
         return Mono.empty();
     }

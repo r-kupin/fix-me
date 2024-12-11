@@ -7,9 +7,11 @@ import com.rokupin.exchange.repo.StockRepo;
 import com.rokupin.model.fix.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 import reactor.netty.tcp.TcpClient;
@@ -23,13 +25,11 @@ import java.util.Objects;
 @Service
 @Transactional
 public class ExchangeServiceImpl {
+    public final int MAX_AMOUNT = 1_000_000_000;
     private final StockRepo stockRepo;
     private final Connection connection;
     private final ObjectMapper objectMapper;
     private final FixMessageProcessor routerInputProcessor;
-
-    public final int MAX_AMOUNT = 1_000_000_000;
-
     private String assignedId;
 
     public ExchangeServiceImpl(StockRepo stockRepo, ObjectMapper objectMapper,
@@ -97,7 +97,7 @@ public class ExchangeServiceImpl {
             FixRequest request = FixMessage.fromFix(msg, new FixRequest());
             log.debug("Processing trading request");
             if (!Objects.isNull(assignedId)) {
-                return sendResponse(request);
+                return prepareSendResponse(request);
             } else {
                 log.warn("Received trading request before ID was assigned");
             }
@@ -120,19 +120,16 @@ public class ExchangeServiceImpl {
         return Mono.empty();
     }
 
-    private Mono<Void> sendStateMessage() {
+    Mono<String> publishCurrentStockState() {
         return stockRepo.findAll()
                 .collectMap(InstrumentEntry::name, InstrumentEntry::amount)
                 .flatMap(map -> {
                     try {
-                        String stateReport = new FixStockStateReport(
-                                assignedId,
-                                objectMapper.writeValueAsString(map)
-                        ).asFix();
-                        log.debug("Sendind state report: {}", stateReport);
-                        return connection.outbound()
-                                .sendString(Mono.just(stateReport), StandardCharsets.UTF_8)
-                                .then();
+                        return Mono.just(
+                                new FixStockStateReport(assignedId,
+                                        objectMapper.writeValueAsString(map)
+                                ).asFix()
+                        );
                     } catch (JsonProcessingException e) {
                         return Mono.error(new RuntimeException("Failed to serialize state", e));
                     } catch (FixMessageMisconfiguredException e) {
@@ -141,22 +138,39 @@ public class ExchangeServiceImpl {
                 });
     }
 
-    private Mono<Void> sendResponse(FixRequest request) {
+    private Mono<Void> sendStateMessage() {
+        return publishCurrentStockState()
+                .flatMap(stateReport -> {
+                    log.debug("Sending state report: {}", stateReport);
+                    return connection.outbound()
+                            .sendString(Mono.just(stateReport), StandardCharsets.UTF_8)
+                            .then();
+                });
+    }
+
+    private Mono<Void> prepareSendResponse(FixRequest request) {
         return processTradeRequest(request)
                 .flatMap(response -> {
                     try {
                         log.debug("Sending response: {}", response.asFix());
+                        Publisher<String> to_send;
+                        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
+                            to_send = Flux.concat(Mono.just(response.asFix()),
+                                    publishCurrentStockState());
+                        } else {
+                            to_send = Mono.just(response.asFix());
+                        }
                         return connection.outbound()
-                                .sendString(Mono.just(response.asFix()),
-                                        StandardCharsets.UTF_8)
+                                .sendString(to_send, StandardCharsets.UTF_8)
                                 .then();
                     } catch (FixMessageMisconfiguredException e) {
                         log.error("Response assembly failed. This can't happen.");
                         return Mono.empty();
                     }
-                })
-                .doOnError(e -> log.error("Failed to process or respond to trade request: {}", e.getMessage()))
-                .then();
+                }).doOnError(e -> log.error(
+                        "Failed to process or respond to trade request: {}",
+                        e.getMessage())
+                ).then();
     }
 
     public Mono<FixResponse> processTradeRequest(FixRequest request) {

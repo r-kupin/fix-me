@@ -29,7 +29,6 @@ public class RouterServiceImpl {
     private final String id;
     private final Map<String, Map<String, Integer>> stateCache;
     private final CommunicationKit communicationKit;
-    int brokers, exchanges;
 
     public RouterServiceImpl(CommunicationKit communicationKit,
                              ObjectMapper objectMapper,
@@ -99,8 +98,9 @@ public class RouterServiceImpl {
 // ---------------- Stock update message handling
 
     private Mono<Void> handleStockStateMsg(FixStockStateReport stockState) throws JsonProcessingException {
-        Map<String, Integer> state = objectMapper.readValue(
-                stockState.getStockJson(), new TypeReference<>() {
+        ConcurrentHashMap<String, Integer> state = objectMapper.readValue(
+                stockState.getStockJson(),
+                new TypeReference<>() {
                 });
 
         if (!state.isEmpty()) {
@@ -204,30 +204,7 @@ public class RouterServiceImpl {
     }
 
     private boolean updateStateFromTradingResponse(FixResponse response) {
-        String id = response.getSender();
-
-        if (!stateCache.containsKey(id)) {
-            log.warn("Response from unknown stock id: {}", id);
-        } else if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
-            Map<String, Integer> stock = stateCache.get(id);
-            String instrument = response.getInstrument();
-            if (!stock.containsKey(instrument)) {
-                log.warn("Stock id: {} sent response on unknown " +
-                        "instrument: {}", id, instrument);
-            } else {
-                int before = stock.get(instrument);
-                int after = response.getAction() == FixRequest.SIDE_BUY ?
-                        before - response.getAmount() : before + response.getAmount();
-                if (after < 0) {
-                    log.warn("Remaining instrument amount can't be negative." +
-                                    "stock response: '{}', current amount: {}",
-                            response, before);
-                } else {
-                    stock.replace(instrument, after);
-                    return true;
-                }
-            }
-        } else if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
             communicationKit.removeExchange(response.getSender());
             stateCache.remove(response.getSender());
             return true;
