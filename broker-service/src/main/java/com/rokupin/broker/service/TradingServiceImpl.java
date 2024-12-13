@@ -165,7 +165,8 @@ public class TradingServiceImpl implements TradingService {
     }
 
     private Mono<Void> updateStateOnResponse(FixResponse response) {
-        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE &&
+                currentStockState.containsKey(response.getSender())) {
             currentStockState.remove(response.getSender());
             publishCurrentStockState();
         }

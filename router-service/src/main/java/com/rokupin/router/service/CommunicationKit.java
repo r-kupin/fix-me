@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
-import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
 
 import java.nio.charset.StandardCharsets;
@@ -125,19 +124,12 @@ public class CommunicationKit {
         brokerToConnection.remove(brokerId);
     }
 
-
     public void removeExchange(String exchangeId) {
         exchangeToConnection.remove(exchangeId);
     }
 
     public Connection getExchangeConnection(String exchangeId) {
         return exchangeToConnection.get(exchangeId);
-    }
-
-    public Function<String, Void> getFixProcessorInput(NettyInbound inbound) {
-        FixMessageProcessor brokerInputProcessor = null;
-        inbound.withConnection(connection -> connection.channel().attr(ASSIGNED_ID_KEY).get());
-        return null;
     }
 
     public FixMessageProcessor getBrokerFixInputProcessor(String id) {

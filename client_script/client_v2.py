@@ -1,8 +1,9 @@
 import asyncio
-import websockets
 import json
 import random
 import string
+
+import websockets
 
 # Configuration
 HOST = "localhost"  # Replace with your host
@@ -58,8 +59,7 @@ async def sync_trade_simulator(uri_):
                     exchange, instrument, available_quantity = random.choice(instruments)
                     amount = available_quantity + random.randint(1, 100)  # Exceeds available
                 action = random.choice(["buy", "sell"])
-                if action == "buy" and available_quantity < 1:
-                    action = "sell"
+
             else:  # Valid request
                 if not instruments:
                     print("No instruments available to trade.")

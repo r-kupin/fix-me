@@ -193,7 +193,8 @@ public class RouterServiceImpl {
     }
 
     private boolean updateStateFromTradingResponse(FixResponse response) {
-        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE) {
+        if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE &&
+                stateCache.containsKey(response.getSender())) {
             communicationKit.removeExchange(response.getSender());
             stateCache.remove(response.getSender());
             return true;
@@ -243,16 +244,19 @@ public class RouterServiceImpl {
                     .sendString(Mono.just(input), StandardCharsets.UTF_8)
                     .then()
                     .onErrorResume(e -> Mono.from(
-                            handleTradingResponseMsg(
-                                    makeFixResponseStr(
-                                            request,
-                                            FixResponse.EXCHANGE_IS_NOT_AVAILABLE
-                                    ))));
+                            publishUnavailableExchangeResponse(request))
+                    );
         } else {
-            log.warn("Target exchange {} is unavailable", target);
-            String fixMsg = makeFixResponseStr(request, FixResponse.EXCHANGE_IS_NOT_AVAILABLE);
-            return Mono.error(new ExchangeConnectivityFailure(fixMsg));
+            return publishUnavailableExchangeResponse(request);
         }
+    }
+
+    private Publisher<Void> publishUnavailableExchangeResponse(FixRequest request) {
+        log.warn("Target exchange {} is unavailable", request.getTarget());
+        String fixMsg = makeFixResponseStr(request,
+                FixResponse.EXCHANGE_IS_NOT_AVAILABLE
+        );
+        return handleTradingResponseMsg(fixMsg);
     }
 
     private String makeFixResponseStr(FixRequest request, int reason) {
