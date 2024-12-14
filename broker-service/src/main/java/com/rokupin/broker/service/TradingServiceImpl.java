@@ -35,9 +35,10 @@ public class TradingServiceImpl implements TradingService {
     // StockId : {Instrument : AmountAvailable}
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> currentStockState;
     private Sinks.Many<String> initialStateSink;
-    private Connection connection;
+
     private String assignedId;
-    private final FixMessageProcessor routerInputProcessor;
+    private Connection connection;
+    private FixMessageProcessor routerInputProcessor;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
                               ObjectMapper objectMapper,
@@ -60,14 +61,13 @@ public class TradingServiceImpl implements TradingService {
         TcpClient.create()
                 .host(host)
                 .port(port)
-                .doOnConnect(connection -> routerInputProcessor.getFlux()
-                        .flatMap(this::handleIncomingMessage)
-                        .subscribe()
-                ).handle((inbound, outbound) -> inbound.receive()
-                        .asString(StandardCharsets.UTF_8)
-                        .doOnNext(routerInputProcessor::processInput)
-                        .then()
-                ).connect()
+                .handle((inbound, outbound) -> {
+                    initializeProcessor();
+                    return inbound.receive()
+                            .asString(StandardCharsets.UTF_8)
+                            .doOnNext(routerInputProcessor::processInput)
+                            .then();
+                }).connect()
                 .retryWhen(retrySpec())
                 .doOnError(e -> {
                     log.warn("TCPService: Connection failed: {}", e.getMessage());
@@ -91,6 +91,20 @@ public class TradingServiceImpl implements TradingService {
                 .doBeforeRetry(signal -> log.info("TCPService: retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
                         new RuntimeException("TCPService: Max retry attempts reached."));
+    }
+
+    private void initializeProcessor() {
+        if (routerInputProcessor != null) {
+            log.info("TCPService: Cleaning up existing processor before re-initialization.");
+            routerInputProcessor.complete();
+        }
+
+        routerInputProcessor = new FixMessageProcessor();
+        routerInputProcessor.getFlux()
+                .flatMap(this::handleIncomingMessage)
+                .subscribe();
+
+        log.info("TCPService: Processor initialized and subscription established.");
     }
 
 // -------------------------- Events from Router processing
@@ -120,24 +134,22 @@ public class TradingServiceImpl implements TradingService {
     }
 
     private Mono<Void> updateStateInitial(FixIdAssignationStockState initialMessage) {
-        if (Objects.isNull(assignedId)) {
-            try {
-                ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> stocksStateMessages =
-                        objectMapper.readValue(initialMessage.getStockJson(),
-                                new TypeReference<>() {});
-                currentStockState.clear();
-                stocksStateMessages.forEach(this::updateState);
-                assignedId = initialMessage.getTarget();
-                initialStateSink.tryEmitNext(serializeCurrentState());
-                log.debug("TCPService: stock state updated from initial update. " +
-                        "Emitting update to the flux.");
-                updateRequested.set(false);
-            } catch (JsonProcessingException e) {
-                log.warn("TCPService: received initial stock state JSON parsing failed");
-            }
-        } else {
-            log.warn("TCPService: repeatable init messages received.");
+        try {
+            ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> stocksStateMessages =
+                    objectMapper.readValue(initialMessage.getStockJson(),
+                            new TypeReference<>() {
+                            });
+            currentStockState.clear();
+            stocksStateMessages.forEach(this::updateState);
+            assignedId = initialMessage.getTarget();
+            initialStateSink.tryEmitNext(serializeCurrentState());
+            log.debug("TCPService: stock state updated from initial update. " +
+                    "Emitting update to the flux.");
+            updateRequested.set(false);
+        } catch (JsonProcessingException e) {
+            log.warn("TCPService: received initial stock state JSON parsing failed");
         }
+
         return Mono.empty();
     }
 
@@ -153,7 +165,8 @@ public class TradingServiceImpl implements TradingService {
         try {
             ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> state =
                     objectMapper.readValue(stateReport.getStockJson(),
-                            new TypeReference<>() {}
+                            new TypeReference<>() {
+                            }
                     );
             currentStockState.clear();
             state.forEach(this::updateState);
@@ -198,19 +211,27 @@ public class TradingServiceImpl implements TradingService {
                         .sendString(Mono.just(fix), StandardCharsets.UTF_8)
                         .then()
                         .thenReturn("Trading request sent")
-                        .onErrorResume(e -> Mono.just("Trading request not sent:" +
-                                " router service isn't available"));
+                        .onErrorResume(e -> {
+                            log.warn("TCPService: Failed to send message, retrying connection: {}",
+                                    e.getMessage());
+                            connection = null; // Reset connection and retry
+                            return reConnectReTry(tradeRequest);
+                        });
             } catch (FixMessageMisconfiguredException e) {
                 return Mono.just("Trading request not sent: " + e);
             }
         } else {
-            initiateRouterConnection();
-            if (Objects.isNull(connection))
-                return Mono.just("Trading request not sent:" +
-                        "Router service is unavailable.");
-            else
-                return handleTradingRequest(tradeRequest);
+            return reConnectReTry(tradeRequest);
         }
+    }
+
+    private Mono<String> reConnectReTry(FixRequest tradeRequest) {
+        initiateRouterConnection();
+        if (Objects.isNull(connection))
+            return Mono.just("Trading request not sent: " +
+                    "Router service is unavailable.");
+        else
+            return handleTradingRequest(tradeRequest);
     }
 
     @Override
