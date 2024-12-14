@@ -25,20 +25,29 @@ import java.util.Objects;
 @Service
 @Transactional
 public class ExchangeServiceImpl {
-    public final int MAX_AMOUNT = 1_000_000_000;
+    private final int maxAmount;
     private final StockRepo stockRepo;
-    private final Connection connection;
     private final ObjectMapper objectMapper;
-    private final FixMessageProcessor routerInputProcessor;
+
     private String assignedId;
+    private final Connection connection;
+    private FixMessageProcessor routerInputProcessor;
 
     public ExchangeServiceImpl(StockRepo stockRepo, ObjectMapper objectMapper,
+                               @Value("${exchange.max-amount}") int maxAmount,
                                @Value("${tcp.host}") String host,
                                @Value("${tcp.port}") int port) {
+        this.maxAmount = maxAmount;
         this.objectMapper = objectMapper;
         this.stockRepo = stockRepo;
         this.routerInputProcessor = new FixMessageProcessor();
         this.connection = connectTcpClient(host, port);
+
+        if (maxAmount < 1 || maxAmount == Integer.MAX_VALUE) {
+            log.error("Max amount is expected to be between 1 and {}. " +
+                    "Check the config.", maxAmount);
+            System.exit(1);
+        }
     }
 
     @PostConstruct
@@ -50,13 +59,13 @@ public class ExchangeServiceImpl {
         }
         InstrumentEntry record = stockRepo.findAll()
                 .filter(entry ->
-                        entry.amount() > MAX_AMOUNT || entry.amount() < 0
+                        entry.amount() > maxAmount || entry.amount() < 0
                 ).next()
                 .block();
         if (Objects.nonNull(record)) {
             log.error("Instrument {} amount of {} is unacceptable. " +
-                            "Amount should be from 0 to {}."
-                    , record.name(), record.amount(), MAX_AMOUNT);
+                            "Amount should be from 0 to {}.",
+                    record.name(), record.amount(), maxAmount);
             System.exit(1);
         }
     }
@@ -66,13 +75,13 @@ public class ExchangeServiceImpl {
         TcpClient client = TcpClient.create()
                 .host(host)
                 .port(port)
-                .doOnConnect(con -> routerInputProcessor.getFlux()
-                        .flatMap(this::handleIncomingMessage)
-                        .subscribe())
-                .handle((inbound, outbound) -> inbound.receive()
-                        .asString(StandardCharsets.UTF_8)
-                        .doOnNext(routerInputProcessor::processInput)
-                        .then());
+                .handle((inbound, outbound) -> {
+                    initializeProcessor();
+                    return inbound.receive()
+                            .asString(StandardCharsets.UTF_8)
+                            .doOnNext(routerInputProcessor::processInput)
+                            .then();
+                });
 
         return client.connect()
                 .doOnError(e -> log.info("Connection failed: {}", e.getMessage()))
@@ -81,13 +90,30 @@ public class ExchangeServiceImpl {
                 .block();
     }
 
+    private void initializeProcessor() {
+        if (routerInputProcessor != null) {
+            log.info("Cleaning up existing processor before re-initialization.");
+            routerInputProcessor.complete();
+        }
+
+        routerInputProcessor = new FixMessageProcessor();
+        routerInputProcessor.getFlux()
+                .flatMap(this::handleIncomingMessage)
+                .subscribe();
+
+        log.info("Processor initialized and subscription established.");
+    }
+
     private Retry retrySpec() {
         return Retry.backoff(5, Duration.ofSeconds(2))
                 .maxBackoff(Duration.ofSeconds(10))
                 .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}",
                         signal.totalRetriesInARow() + 1))
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
-                        new RuntimeException("Max retry attempts reached."));
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> {
+                    log.error("Max retry attempts reached.");
+                    System.exit(1);
+                    return null;
+                });
     }
 
     private Mono<Void> handleIncomingMessage(String msg) {
@@ -214,7 +240,7 @@ public class ExchangeServiceImpl {
                 return Mono.just(response);
             }
         } else if (request.getAction() == FixRequest.SIDE_SELL) {
-            if (entry.amount() + request.getAmount() <= MAX_AMOUNT) {
+            if (entry.amount() + request.getAmount() <= maxAmount) {
                 return updateStockQuantity(entry,
                         entry.amount() + request.getAmount()
                 ).thenReturn(response);
