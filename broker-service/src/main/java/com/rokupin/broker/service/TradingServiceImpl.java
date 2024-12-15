@@ -88,8 +88,10 @@ public class TradingServiceImpl implements TradingService {
     private Retry retrySpec() {
         return Retry.backoff(5, Duration.ofSeconds(2))
                 .maxBackoff(Duration.ofSeconds(10))
-                .doBeforeRetry(signal -> log.info("TCPService: retrying connection, attempt {}", signal.totalRetriesInARow() + 1))
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
+                .doBeforeRetry(signal -> log.info(
+                        "TCPService: retrying connection, attempt {}",
+                        signal.totalRetriesInARow() + 1)
+                ).onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
                         new RuntimeException("TCPService: Max retry attempts reached."));
     }
 
