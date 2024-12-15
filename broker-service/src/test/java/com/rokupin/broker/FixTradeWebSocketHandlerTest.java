@@ -74,37 +74,37 @@ public class FixTradeWebSocketHandlerTest {
                 session -> sendRequestWaitForStockStateUpdate(session, 3));
 
         DisposableServer server = mockRouterServer
-                .doOnConnection(connection -> connection.outbound()
-                        .sendString(Mono.just(makeJsonInitialMsg(routerID, brokerID, stocks)), StandardCharsets.UTF_8)
-                        .then()
-                        .subscribe()
+                .doOnConnection(connection -> {
+                            fixMessageProcessor.getFlux()
+                                    .flatMap(payload ->
+                                            processIncomingMessage(payload,
+                                                    stocks,
+                                                    brokerID,
+                                                    connection.outbound())
+                                    ).subscribe();
+
+                            connection.outbound()
+                                    .sendString(
+                                            Mono.just(makeJsonInitialMsg(routerID, brokerID, stocks)),
+                                            StandardCharsets.UTF_8
+                                    ).then()
+                                    .subscribe();
+                        }
                 ).handle((inbound, outbound) -> inbound.receive()
                         .asString(StandardCharsets.UTF_8)
-                        .flatMap(payload -> handleIncomingData(payload, stocks, brokerID, outbound))
-                        .doOnError(e -> {
-                            throw new AssertionError(e.getMessage());
-                        }).then()
+                        .doOnNext(fixMessageProcessor::processInput)
+                        .then()
                 ).bindNow();
 
-        Mono<Void> clientsExecution = Mono.when(clientExecution1,
-                        clientExecution2,
-                        clientExecution3)
-                .then(Mono.defer(() -> Mono.fromRunnable(server::dispose)));
+        Mono<Void> clientsExecution = Mono.when(
+                clientExecution1,
+                clientExecution2,
+                clientExecution3
+        ).then(Mono.fromRunnable(server::disposeNow));
 
-        StepVerifier.create(Mono.when(clientsExecution, server.onDispose()))
+        StepVerifier.create(clientsExecution)
                 .expectComplete()
                 .verify();
-    }
-
-    private Mono<Void> handleIncomingData(String data,
-                                          Map<String, Map<String, Integer>> stocks,
-                                          String brokerID,
-                                          NettyOutbound outbound) {
-        return Mono.empty();
-//        return fixMessageProcessor.processInput(data) // Split into individual messages
-//                .flatMap(msg -> processIncomingMessage(
-//                        msg, stocks, brokerID, outbound
-//                )).then();
     }
 
     private Mono<Void> processIncomingMessage(String payload,

@@ -7,7 +7,7 @@ import websockets
 
 # Configuration
 HOST = "localhost"  # Replace with your host
-PORT = 8084  # Replace with your port
+PORT = 8080  # Replace with your port
 
 
 # Helper function to create random trading requests
