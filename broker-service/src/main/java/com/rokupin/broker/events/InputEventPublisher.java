@@ -19,8 +19,7 @@ import java.util.function.Consumer;
 @SuppressWarnings("rawtypes")
 @Component
 public class InputEventPublisher<E extends InputEvent> implements
-        ApplicationListener<E>, // <1>
-        Consumer<FluxSink<E>> { //<2>
+        ApplicationListener<E>, Consumer<FluxSink<E>> {
 
     private final Executor executor;
 
@@ -33,14 +32,13 @@ public class InputEventPublisher<E extends InputEvent> implements
      * FluxSink<StockUpdateReceivedEvent> sink pointer we’ve been given when the
      * Flux is first created.
      */
-    private final BlockingQueue<E> queue =
-            new LinkedBlockingQueue<>(); // <3>
+    private final BlockingQueue<E> queue = new LinkedBlockingQueue<>();
 
     public InputEventPublisher(@Qualifier("eventPublisherExecutor") Executor executor) {
         this.executor = executor;
     }
 
-    // will be called when any new events published when a new Profile is created <4>
+    // will be called when any new events published when a new Profile is created
     @Override
     public void onApplicationEvent(E event) {
         this.queue.offer(event);
@@ -59,8 +57,8 @@ public class InputEventPublisher<E extends InputEvent> implements
         this.executor.execute(() -> {
             while (true)
                 try {
-                    E event = queue.take(); // <5>
-                    sink.next(event); // <6>
+                    E event = queue.take();
+                    sink.next(event);
                 } catch (InterruptedException e) {
                     ReflectionUtils.rethrowRuntimeException(e);
                 }

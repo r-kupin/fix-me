@@ -139,8 +139,7 @@ public class TradingServiceImpl implements TradingService {
         try {
             ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> stocksStateMessages =
                     objectMapper.readValue(initialMessage.getStockJson(),
-                            new TypeReference<>() {
-                            });
+                            new TypeReference<>() {});
             currentStockState.clear();
             stocksStateMessages.forEach(this::updateState);
             assignedId = initialMessage.getTarget();

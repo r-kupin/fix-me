@@ -22,15 +22,13 @@ public class EventConfig {
 
     @Bean
     public Consumer<FluxSink<InputEvent<StocksStateMessage>>> stockStateUpdateEventPublisher(
-            @Qualifier("eventPublisherExecutor")
-            Executor executor) {
+            @Qualifier("eventPublisherExecutor") Executor executor) {
         return new InputEventPublisher<>(executor);
     }
 
     @Bean
     public Consumer<FluxSink<InputEvent<FixResponse>>> tradeResponseEventPublisher(
-            @Qualifier("eventPublisherExecutor")
-            Executor executor) {
+            @Qualifier("eventPublisherExecutor") Executor executor) {
         return new InputEventPublisher<>(executor);
     }
 }
