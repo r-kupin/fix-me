@@ -26,11 +26,11 @@ public class FixTradeWebSocketHandlerTest {
 
     private final int port = 8081;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final boolean[] clientSentRequest = {false, false, false, false};
     private ObjectMapper objectMapper;
     private WebSocketClient mockClient;
     private TcpServer mockRouterServer;
     private URI brockerServiceWsUri;
-    private final boolean[] clientSentRequest = {false, false, false, false};
     private FixMessageProcessor fixMessageProcessor;
 
     @BeforeEach
@@ -115,13 +115,24 @@ public class FixTradeWebSocketHandlerTest {
         try {
             FixRequest request = FixMessage.fromFix(payload, new FixRequest());
             if (request.getSender().equals(brokerID)) {
-                String fix = updateMockStock(stocks, request).asFix();
+                FixResponse fixResponse = updateMockStock(stocks, request);
+                String fix = fixResponse.asFix();
                 System.out.println("External API mock: sending: '" + fix + "'");
+                if (fixResponse.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
+                    String upd = new FixStockStateReport(
+                            "R00001",
+                            objectMapper.writeValueAsString(stocks)
+                    ).asFix();
+                    System.out.println("External API mock: sending: '" + upd + "'");
+                    fix += upd;
+                }
                 return outbound.sendString(Mono.just(fix), StandardCharsets.UTF_8).then();
             }
             return Mono.error(new AssertionError("Received message is not supported"));
         } catch (FixMessageMisconfiguredException e) {
             return Mono.error(new AssertionError("Received message is not supported"));
+        } catch (JsonProcessingException e) {
+            return Mono.error(new AssertionError("Can't serialize state"));
         }
     }
 

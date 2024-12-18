@@ -9,6 +9,7 @@ public class FixResponseNegativeTests {
     @Test
     public void fixResponseMissingRequiredFieldsTest() {
         String incompleteMessage = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "48" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "8" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +
@@ -30,6 +31,7 @@ public class FixResponseNegativeTests {
     @Test
     public void fixResponseInvalidChecksumTest() {
         String invalidChecksumMessage = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "54" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "8" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +
@@ -51,6 +53,7 @@ public class FixResponseNegativeTests {
     @Test
     public void fixResponseInvalidMessageTypeTest() {
         String invalidMessageTypeMessage = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "54" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "D" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +
@@ -72,6 +75,7 @@ public class FixResponseNegativeTests {
     @Test
     public void fixResponseInvalidActionTest() {
         String invalidActionMessage = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "48" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "8" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +

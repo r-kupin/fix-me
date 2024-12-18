@@ -10,6 +10,7 @@ public class FixRequestPositiveTests {
     public void fixRequestNewArgumentsTest() throws FixMessageMisconfiguredException {
 
         String expected = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "48" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "D" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "B00000" + "\u0001" +
                 FixMessage.TAG_SOURCE_SUB_ID + "=" + 0 + "\u0001" +
@@ -17,7 +18,7 @@ public class FixRequestPositiveTests {
                 FixMessage.TAG_SIDE + "=" + FixRequest.SIDE_BUY + "\u0001" +
                 FixMessage.TAG_ORDER_QTY + "=" + 1 + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "E00000" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=" + "048" + "\u0001";
+                FixMessage.TAG_CHECKSUM + "=" + "018" + "\u0001";
 
         FixRequest request = new FixRequest(
                 "B00000",
@@ -42,6 +43,7 @@ public class FixRequestPositiveTests {
     public void fixRequestFromClientTradingRequestTest() throws FixMessageMisconfiguredException {
 
         String expected = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "48" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "D" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "B00000" + "\u0001" +
                 FixMessage.TAG_SOURCE_SUB_ID + "=" + 0 + "\u0001" +
@@ -49,7 +51,7 @@ public class FixRequestPositiveTests {
                 FixMessage.TAG_SIDE + "=" + FixRequest.SIDE_BUY + "\u0001" +
                 FixMessage.TAG_ORDER_QTY + "=" + 1 + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "E00000" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=" + "048" + "\u0001";
+                FixMessage.TAG_CHECKSUM + "=" + "018" + "\u0001";
 
         FixRequest request = new FixRequest(new ClientTradingRequest(
                 "E00000",
@@ -67,6 +69,7 @@ public class FixRequestPositiveTests {
     public void fixRequestFromMessageStringTest() throws FixMessageMisconfiguredException {
 
         String expected = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "48" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "D" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "B00000" + "\u0001" +
                 FixMessage.TAG_SOURCE_SUB_ID + "=" + 0 + "\u0001" +
@@ -74,9 +77,10 @@ public class FixRequestPositiveTests {
                 FixMessage.TAG_SIDE + "=" + FixRequest.SIDE_BUY + "\u0001" +
                 FixMessage.TAG_ORDER_QTY + "=" + 1 + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "E00000" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=" + "048" + "\u0001";
+                FixMessage.TAG_CHECKSUM + "=" + "018" + "\u0001";
 
         FixRequest request = FixMessage.fromFix(expected, new FixRequest());
-        Assertions.assertEquals(request.asFix(), expected);
+        String fix = request.asFix();
+        Assertions.assertEquals(fix, expected);
     }
 }

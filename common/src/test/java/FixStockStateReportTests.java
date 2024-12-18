@@ -8,10 +8,11 @@ public class FixStockStateReportTests {
     @Test
     public void fixStockStateReportValidTest() throws FixMessageMisconfiguredException {
         String expected = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=U2" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=056" + "\u0001";
+                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
+                FixMessage.TAG_CHECKSUM + "=087" + "\u0001";
 
         FixStockStateReport report = new FixStockStateReport(
                 "EXCHANGE1",
@@ -24,10 +25,11 @@ public class FixStockStateReportTests {
     @Test
     public void fixStockStateReportFromFixTest() throws FixMessageMisconfiguredException {
         String validFixMessage = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=U2" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=056" + "\u0001";
+                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
+                FixMessage.TAG_CHECKSUM + "=087" + "\u0001";
 
         FixStockStateReport report = FixMessage.fromFix(validFixMessage, new FixStockStateReport());
 
@@ -39,25 +41,27 @@ public class FixStockStateReportTests {
     @Test
     public void fixStockStateReportMissingFieldsTest() {
         String incompleteMessage = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=U2" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-//                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=056" + "\u0001";
+//                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
+                FixMessage.TAG_CHECKSUM + "=087" + "\u0001";
 
         FixMessageMisconfiguredException exception = Assertions.assertThrows(
                 FixMessageMisconfiguredException.class,
                 () -> FixMessage.fromFix(incompleteMessage, new FixStockStateReport())
         );
 
-        Assertions.assertEquals("Missing required tag: 0", exception.getMessage()); // TAG_STOCK_STATE_JSON
+        Assertions.assertEquals("Missing required tag: 58", exception.getMessage()); // TAG_TEXT
     }
 
     @Test
     public void fixStockStateReportInvalidChecksumTest() {
         String invalidChecksumMessage = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=U2" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
+                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
                 FixMessage.TAG_CHECKSUM + "=999" + "\u0001";
 
         FixMessageMisconfiguredException exception = Assertions.assertThrows(
@@ -71,9 +75,10 @@ public class FixStockStateReportTests {
     @Test
     public void fixStockStateReportInvalidMessageTypeTest() {
         String invalidMessageTypeMessage = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=D" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
+                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001" +
                 FixMessage.TAG_CHECKSUM + "=199" + "\u0001";
 
         FixMessageMisconfiguredException exception = Assertions.assertThrows(
@@ -87,9 +92,10 @@ public class FixStockStateReportTests {
     @Test
     public void fixStockStateReportMissingChecksumTest() {
         String messageWithoutChecksum = FixMessage.TAG_BEGIN_STRING + "=FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "45" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=U2" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=EXCHANGE1" + "\u0001" +
-                FixMessage.TAG_STOCK_STATE_JSON + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001"; // Missing checksum
+                FixMessage.TAG_TEXT + "={\"AAPL\":100,\"GOOG\":50}" + "\u0001"; // Missing checksum
 
         FixMessageMisconfiguredException exception = Assertions.assertThrows(
                 FixMessageMisconfiguredException.class,

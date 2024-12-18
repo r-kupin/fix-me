@@ -37,6 +37,7 @@ public class TradingServiceImpl implements TradingService {
     private Sinks.Many<String> initialStateSink;
 
     private String assignedId;
+    private String routerId;
     private Connection connection;
     private FixMessageProcessor routerInputProcessor;
 
@@ -143,6 +144,7 @@ public class TradingServiceImpl implements TradingService {
             currentStockState.clear();
             stocksStateMessages.forEach(this::updateState);
             assignedId = initialMessage.getTarget();
+            routerId = initialMessage.getSender();
             initialStateSink.tryEmitNext(serializeCurrentState());
             log.debug("TCPService: stock state updated from initial update. " +
                     "Emitting update to the flux.");
@@ -264,7 +266,7 @@ public class TradingServiceImpl implements TradingService {
     // -------------------------- Util
     private Mono<String> publishFixStateUpdateRequest() {
         try {
-            return Mono.just(new FixStateUpdateRequest(assignedId).asFix());
+            return Mono.just(new FixStateUpdateRequest(assignedId, routerId).asFix());
         } catch (FixMessageMisconfiguredException e) {
             log.error("TCPService: can't make FixStateUpdateRequest");
             return Mono.empty();

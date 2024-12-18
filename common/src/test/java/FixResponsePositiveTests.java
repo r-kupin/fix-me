@@ -7,6 +7,7 @@ public class FixResponsePositiveTests {
     public void fixResponseNewArgumentsTest() throws FixMessageMisconfiguredException {
 
         String expected = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "54" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "8" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +
@@ -15,7 +16,7 @@ public class FixResponsePositiveTests {
                 FixMessage.TAG_SIDE + "=" + FixRequest.SIDE_SELL + "\u0001" +
                 FixMessage.TAG_ORDER_QTY + "=" + 1 + "\u0001" +
                 FixResponse.TAG_ORD_STATUS + "=" + FixResponse.MSG_ORD_FILLED + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=" + "059" + "\u0001";
+                FixMessage.TAG_CHECKSUM + "=" + "029" + "\u0001";
 
         FixResponse response = new FixResponse(
                 "E00000",
@@ -35,6 +36,7 @@ public class FixResponsePositiveTests {
     public void fixResponseFromFixTest() throws FixMessageMisconfiguredException {
 
         String expected = FixMessage.TAG_BEGIN_STRING + "=" + "FIX.5.0" + "\u0001" +
+                FixMessage.TAG_BODY_LENGTH + "=" + "54" + "\u0001" +
                 FixMessage.TAG_MSG_TYPE + "=" + "8" + "\u0001" +
                 FixMessage.TAG_SOURCE_COMP_ID + "=" + "E00000" + "\u0001" +
                 FixMessage.TAG_TARGET_COMP_ID + "=" + "B00001" + "\u0001" +
@@ -43,7 +45,7 @@ public class FixResponsePositiveTests {
                 FixMessage.TAG_SIDE + "=" + FixRequest.SIDE_SELL + "\u0001" +
                 FixMessage.TAG_ORDER_QTY + "=" + 1 + "\u0001" +
                 FixResponse.TAG_ORD_STATUS + "=" + FixResponse.MSG_ORD_FILLED + "\u0001" +
-                FixMessage.TAG_CHECKSUM + "=" + "059" + "\u0001";
+                FixMessage.TAG_CHECKSUM + "=" + "029" + "\u0001";
 
         FixResponse response = FixMessage.fromFix(expected, new FixResponse());
 

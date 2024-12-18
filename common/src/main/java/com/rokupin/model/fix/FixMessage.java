@@ -2,12 +2,15 @@ package com.rokupin.model.fix;
 
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public abstract class FixMessage implements Serializable {
-    public static final int TAG_STOCK_STATE_JSON = 0;
     public static final int TAG_BEGIN_STRING = 8;
+    public static final int TAG_BODY_LENGTH = 9;
     public static final int TAG_CHECKSUM = 10;
     public static final int TAG_MSG_TYPE = 35;
     public static final int TAG_ORDER_QTY = 38;
@@ -17,6 +20,7 @@ public abstract class FixMessage implements Serializable {
     public static final int TAG_SYMBOL = 55;
     public static final int TAG_TARGET_COMP_ID = 56;
     public static final int TAG_TARGET_SUB_ID = 57;
+    public static final int TAG_TEXT = 58;
     public static final int TAG_ORD_REJ_REASON = 103;
 
     public static <T extends FixMessage> T fromFix(String fixMessage, T message) throws FixMessageMisconfiguredException {
@@ -31,9 +35,15 @@ public abstract class FixMessage implements Serializable {
         message.parseFields(fixFields);
         message.validateFields();
         // get checksum from input msg
+        String messageBody = message.messageBody();
         int checksum = Integer.parseInt(getRequiredField(fixFields, TAG_CHECKSUM));
+        int length = Integer.parseInt(getRequiredField(fixFields, TAG_BODY_LENGTH));
+
+        if (length != messageBody.length())
+            throw new FixMessageMisconfiguredException("Body length doesn't match");
         // calculate checksum of provided fields and compare
-        message.validateChecksum(checksum);
+        if (calculateChecksum(messageBody) != checksum)
+            throw new FixMessageMisconfiguredException("Checksum doesn't match");
         return message;
     }
 
@@ -51,25 +61,19 @@ public abstract class FixMessage implements Serializable {
 
     protected abstract void validateFields() throws FixMessageMisconfiguredException;
 
-    protected void validateChecksum(int checksum) throws FixMessageMisconfiguredException {
-        // calculate checksum independently and match results
-        if (calculateChecksum(messageWithoutChecksum().toString()) != checksum)
-            throw new FixMessageMisconfiguredException("Checksum doesn't match");
+    private static int calculateChecksum(String message) {
+        byte[] bytes = message.getBytes(StandardCharsets.US_ASCII);
+        int sum = 0;
+        for (byte b : bytes) {
+            sum += b;
+        }
+        return sum % 256;
     }
 
-    protected StringBuilder messageWithoutChecksum() throws FixMessageMisconfiguredException {
+    protected String messageBody() throws FixMessageMisconfiguredException {
         StringBuilder fixMessage = new StringBuilder();
 
-        appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
         appendFields(fixMessage);
-        return fixMessage;
-    }
-
-    public String asFix() throws FixMessageMisconfiguredException {
-        StringBuilder fixMessage = messageWithoutChecksum();
-        int checksum = calculateChecksum(fixMessage.toString());
-        appendTag(fixMessage, TAG_CHECKSUM, String.format("%03d", checksum));
-
         return fixMessage.toString();
     }
 
@@ -89,12 +93,16 @@ public abstract class FixMessage implements Serializable {
         };
     }
 
-    private int calculateChecksum(String message) {
-        byte[] bytes = message.getBytes(StandardCharsets.US_ASCII);
-        int sum = 0;
-        for (byte b : bytes) {
-            sum += b;
-        }
-        return sum % 256;
+    public String asFix() throws FixMessageMisconfiguredException {
+        String body = messageBody();
+        int checksum = calculateChecksum(body);
+
+        StringBuilder fixMessage = new StringBuilder();
+        appendTag(fixMessage, TAG_BEGIN_STRING, "FIX.5.0");
+        appendTag(fixMessage, TAG_BODY_LENGTH, String.valueOf(body.length()));
+        fixMessage.append(body);
+        appendTag(fixMessage, TAG_CHECKSUM, String.format("%03d", checksum));
+
+        return fixMessage.toString();
     }
 }

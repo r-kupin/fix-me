@@ -1,6 +1,5 @@
 package com.rokupin.model.fix;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -16,7 +15,8 @@ public class FixStockStateReport extends FixMessage {
 
     private String msgType;     // MsgType (35)
     private String sender;      // SenderCompID (49)
-    private String stockJson;
+    private String target;      // TargetCompID (56)
+    private String stockJson;   // Text (58)
 
     public FixStockStateReport(String sender, String stockJson) {
         this.msgType = MSG_STOCK_REPORT;
@@ -28,14 +28,14 @@ public class FixStockStateReport extends FixMessage {
     protected void parseFields(Map<Integer, String> fixFields) throws FixMessageMisconfiguredException {
         this.msgType = getRequiredField(fixFields, TAG_MSG_TYPE);
         this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
-        this.stockJson = getRequiredField(fixFields, TAG_STOCK_STATE_JSON);
+        this.stockJson = getRequiredField(fixFields, TAG_TEXT);
     }
 
     @Override
     protected void appendFields(StringBuilder fixMessage) throws FixMessageMisconfiguredException {
         appendTag(fixMessage, TAG_MSG_TYPE, MSG_STOCK_REPORT);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
-        appendTag(fixMessage, TAG_STOCK_STATE_JSON, stockJson);
+        appendTag(fixMessage, TAG_TEXT, stockJson);
     }
 
     @Override

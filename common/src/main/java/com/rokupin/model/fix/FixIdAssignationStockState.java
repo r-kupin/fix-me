@@ -1,6 +1,5 @@
 package com.rokupin.model.fix;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -17,7 +16,7 @@ public class FixIdAssignationStockState extends FixMessage {
     private String msgType;     // MsgType (35)
     private String sender;      // SenderCompID (49)
     private String target;      // TargetCompID (56)    >> assigned ID
-    private String stockJson;
+    private String stockJson;   // Text (58)
 
     public FixIdAssignationStockState(String sender, String target, String stockJson) {
         this.msgType = MSG_ID_ASSIGNATION_WITH_STOCKS;
@@ -31,7 +30,7 @@ public class FixIdAssignationStockState extends FixMessage {
         this.msgType = getRequiredField(fixFields, TAG_MSG_TYPE);
         this.sender = getRequiredField(fixFields, TAG_SOURCE_COMP_ID);
         this.target = getRequiredField(fixFields, TAG_TARGET_COMP_ID);
-        this.stockJson = getRequiredField(fixFields, TAG_STOCK_STATE_JSON);
+        this.stockJson = getRequiredField(fixFields, TAG_TEXT);
     }
 
     @Override
@@ -39,7 +38,7 @@ public class FixIdAssignationStockState extends FixMessage {
         appendTag(fixMessage, TAG_MSG_TYPE, msgType);
         appendTag(fixMessage, TAG_SOURCE_COMP_ID, sender);
         appendTag(fixMessage, TAG_TARGET_COMP_ID, target);
-        appendTag(fixMessage, TAG_STOCK_STATE_JSON, stockJson);
+        appendTag(fixMessage, TAG_TEXT, stockJson);
     }
 
     @Override

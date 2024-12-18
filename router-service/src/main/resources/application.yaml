@@ -1,5 +1,5 @@
 router:
-  id: R0000
+  id: ${ROUTER_ID:R0000}
   tcp:
     broker:
       host: ${ROUTER_HOST:localhost}

@@ -28,9 +28,9 @@ public class FixTradeExchangeCommunicationTest {
     /**
      * Expect output:
      * DB should be online, and it's state should correspond to {"TEST2":2,"TEST1":1}
-     * External API mock: received '{"stocks":{"E00000":{"TEST2":2,"TEST1":1}}}'
-     * External API mock: received '8=FIX.5.0|35=8|49=E00000|56=B00000|57=1|55=TEST1|54=1|38=1|39=2|10=057|'
-     * VerifySubscriber timed out error is fine
+     * External API mock: received '8=FIX.5.0|9=41|35=U2|49=E00000|58={"TEST2":2,"TEST1":1}|10=030|'
+     * External API mock: received '8=FIX.5.0|9=54|35=8|49=E00000|56=B00000|57=1|55=TEST1|54=1|38=1|39=2|10=027|'
+     * External API mock: received '8=FIX.5.0|9=41|35=U2|49=E00000|58={"TEST2":2,"TEST1":0}|10=029|'
      */
     @Test
     public void connectionTest() {
