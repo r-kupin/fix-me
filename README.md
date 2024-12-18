@@ -131,7 +131,7 @@ Each successful request made by any client modifies the state of the market, and
 
 ### Broker-service
 Provides clients with a single endpoint for sending trading requests and receiving responses.
-
+[client-broker](media/img-client-broker.png)
 #### Configuration
 Used to specify key variables:
 - **`ROUTER_HOST`** and **`ROUTER_BROKER_PORT`**: to access router
@@ -209,6 +209,9 @@ When connection is established, `TradingService` makes it's [`FixMessageProcesso
 Other messages are ignored.
 
 ### Router-service
+
+[broker-router](media/img-broker-router.png)
+
 Provides connectivity between `broker`s and `exchange`s and maintains a reference state cache, which aggregates current states of all `exchange`s connected to it.
 
 #### Configuration
@@ -283,7 +286,7 @@ Expected to contain JSON `Map<String, Integer>` representation of the particular
 Is forwarded to the `broker`, on whose request it answers. 
 
 ### Exchange-service
-
+[router-exchange](media/img-router-exchange.png)
 #### Configuration
 Is fairly straightforward:
 - **`MAX_AMOUNT`**:  maximum amount of each instrument this exchange would accept. E.g. if the selling request arrives, and the amount after request fulfillment will exceed `MAX_AMOUNT` - such request will be rejected. Used for type safety, as app is a demonstrative one and only operates with integers.
