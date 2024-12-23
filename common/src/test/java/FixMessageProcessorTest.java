@@ -1,11 +1,19 @@
 import com.rokupin.model.fix.FixMessageProcessor;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 public class FixMessageProcessorTest {
+
+    FixMessageProcessor processor;
+
+    @BeforeEach
+    void before() {
+        processor = new FixMessageProcessor();
+    }
+
     @Test
     void testSingleCompleteMessage() {
-        FixMessageProcessor processor = new FixMessageProcessor();
         String input = "8=FIX.5.0\u000135=D\u000110=123\u0001";
 
         StepVerifier.create(processor.getFlux())
@@ -17,7 +25,6 @@ public class FixMessageProcessorTest {
 
     @Test
     void testSingleTwoMessages() {
-        FixMessageProcessor processor = new FixMessageProcessor();
         String part1 = "8=FIX.5.0\u000135=D\u000110=123\u00018=FIX.5.0\u000135=A\u000110=123";
         String part2 = "\u0001";
 
@@ -33,8 +40,6 @@ public class FixMessageProcessorTest {
 
     @Test
     void testSplitMessages() {
-        FixMessageProcessor processor = new FixMessageProcessor();
-
         String part1 = "8=FIX.5.0\u000135=D\u0001";
         String part2 = "10=123\u00018=FIX.5.0\u000135=F\u0001";
         String part3 = "10=456\u0001";
@@ -52,8 +57,6 @@ public class FixMessageProcessorTest {
 
     @Test
     void testIncompleteMessage() {
-        FixMessageProcessor processor = new FixMessageProcessor();
-
         String input = "8=FIX.5.0\u000135=D\u0001"; // Incomplete message
 
         StepVerifier.create(processor.getFlux())
