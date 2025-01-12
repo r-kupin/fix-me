@@ -51,14 +51,16 @@ public class RouterServiceImpl {
     @PostConstruct
     private void init() {
         brokerServer.doOnConnection(this::doOnBrokerConnection)
-                .doOnConnection(new BrokerOnConnectionHandler(communicationKit))
-                .bindNow()
+                .doOnConnection(new OnConnectionHandler(
+                        communicationKit.getBrokerInputProcessors())
+                ).bindNow()
                 .onDispose()
                 .subscribe();
 
         exchangeServer.doOnConnection(this::doOnExchangeConnection)
-                .doOnConnection(new ExchangeOnConnectionHandler(communicationKit))
-                .bindNow()
+                .doOnConnection(new OnConnectionHandler(
+                        communicationKit.getExchangeInputProcessors())
+                ).bindNow()
                 .onDispose()
                 .subscribe();
     }

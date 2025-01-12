@@ -5,6 +5,7 @@ import com.rokupin.model.fix.FixIdAssignationStockState;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixMessageProcessor;
 import io.netty.util.AttributeKey;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,7 +27,9 @@ public class CommunicationKit {
     private final String routerId;
     private final Map<String, Connection> brokerToConnection;
     private final Map<String, Connection> exchangeToConnection;
+    @Getter
     private final Map<String, FixMessageProcessor> brokerInputProcessors;
+    @Getter
     private final Map<String, FixMessageProcessor> exchangeInputProcessors;
     int brokers, exchanges;
 
@@ -130,13 +133,5 @@ public class CommunicationKit {
 
     public Connection getExchangeConnection(String exchangeId) {
         return exchangeToConnection.get(exchangeId);
-    }
-
-    public FixMessageProcessor getBrokerFixInputProcessor(String id) {
-        return brokerInputProcessors.get(id);
-    }
-
-    public FixMessageProcessor getExchangeFixInputProcessor(String id) {
-        return exchangeInputProcessors.get(id);
     }
 }

@@ -5,14 +5,15 @@ import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.function.Consumer;
 
-public class BrokerOnConnectionHandler implements Consumer<Connection> {
+public class OnConnectionHandler implements Consumer<Connection> {
 
-    private final CommunicationKit communicationKit;
+    private final Map<String, FixMessageProcessor> inputProcessors;
 
-    public BrokerOnConnectionHandler(CommunicationKit communicationKit) {
-        this.communicationKit = communicationKit;
+    public OnConnectionHandler(Map<String, FixMessageProcessor> inputProcessors) {
+        this.inputProcessors = inputProcessors;
     }
 
     @Override
@@ -21,8 +22,7 @@ public class BrokerOnConnectionHandler implements Consumer<Connection> {
                 .attr(CommunicationKit.ASSIGNED_ID_KEY)
                 .get();
 
-        FixMessageProcessor inputProcessor = communicationKit
-                .getBrokerFixInputProcessor(id);
+        FixMessageProcessor inputProcessor = inputProcessors.get(id);
 
         Mono.fromDirect(connection.inbound()
                 .receive()
