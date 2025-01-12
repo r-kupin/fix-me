@@ -7,41 +7,27 @@ import com.rokupin.exchange.repo.StockRepo;
 import com.rokupin.model.fix.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.netty.Connection;
-import reactor.netty.tcp.TcpClient;
-import reactor.util.retry.Retry;
 
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Objects;
 
 @Slf4j
 @Service
 @Transactional
-public class ExchangeServiceImpl {
+public class ExchangeServiceImpl implements ExchangeService  {
     private final int maxAmount;
     private final StockRepo stockRepo;
     private final ObjectMapper objectMapper;
 
-    private String assignedId;
-    private final Connection connection;
-    private FixMessageProcessor routerInputProcessor;
 
     public ExchangeServiceImpl(StockRepo stockRepo, ObjectMapper objectMapper,
-                               @Value("${exchange.max-amount}") int maxAmount,
-                               @Value("${tcp.host}") String host,
-                               @Value("${tcp.port}") int port) {
+                               @Value("${exchange.max-amount}") int maxAmount) {
         this.maxAmount = maxAmount;
         this.objectMapper = objectMapper;
         this.stockRepo = stockRepo;
-        this.routerInputProcessor = new FixMessageProcessor();
-        this.connection = connectTcpClient(host, port);
 
         if (maxAmount < 1 || maxAmount == Integer.MAX_VALUE) {
             log.error("Max amount is expected to be between 1 and {}. " +
@@ -70,89 +56,15 @@ public class ExchangeServiceImpl {
         }
     }
 
-    private Connection connectTcpClient(String host, int port) {
-
-        TcpClient client = TcpClient.create()
-                .host(host)
-                .port(port)
-                .handle((inbound, outbound) -> {
-                    initializeProcessor();
-                    return inbound.receive()
-                            .asString(StandardCharsets.UTF_8)
-                            .doOnNext(routerInputProcessor::processInput)
-                            .then();
-                });
-
-        return client.connect()
-                .doOnError(e -> log.info("Connection failed: {}", e.getMessage()))
-                .retryWhen(retrySpec())
-                .doOnSuccess(conn -> log.info("Connected successfully to {}:{}", host, port))
-                .block();
-    }
-
-    private void initializeProcessor() {
-        if (routerInputProcessor != null) {
-            log.info("Cleaning up existing processor before re-initialization.");
-            routerInputProcessor.complete();
-        }
-
-        routerInputProcessor = new FixMessageProcessor();
-        routerInputProcessor.getFlux()
-                .flatMap(this::handleIncomingMessage)
-                .subscribe();
-
-        log.info("Processor initialized and subscription established.");
-    }
-
-    private Retry retrySpec() {
-        return Retry.backoff(5, Duration.ofSeconds(2))
-                .maxBackoff(Duration.ofSeconds(10))
-                .doBeforeRetry(signal -> log.info("Retrying connection, attempt {}",
-                        signal.totalRetriesInARow() + 1))
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> {
-                    log.error("Max retry attempts reached.");
-                    System.exit(1);
-                    return null;
-                });
-    }
-
-    private Mono<Void> handleIncomingMessage(String msg) {
-        log.debug("Received message: '{}'", msg);
-
-        try { // is it a trading request?
-            FixRequest request = FixMessage.fromFix(msg, new FixRequest());
-            log.debug("Processing trading request");
-            if (!Objects.isNull(assignedId)) {
-                return prepareSendResponse(request);
-            } else {
-                log.warn("Received trading request before ID was assigned");
-            }
-        } catch (FixMessageMisconfiguredException e) {
-            try { // is it an ID assignation message?
-                FixIdAssignation idMsg = FixMessage.fromFix(msg, new FixIdAssignation());
-
-                if (Objects.isNull(assignedId)) {
-                    assignedId = idMsg.getTarget();
-                    return sendStateMessage();
-                } else {
-                    log.warn("Re-assignation of the ID");
-                }
-            } catch (FixMessageMisconfiguredException ex) {
-                log.warn("Received message is not supported. Ignoring.");
-            }
-        } catch (IllegalStateException e) {
-            log.warn("Received message is not valid FIX request");
-        }
-        return Mono.empty();
-    }
-
-    Mono<String> publishCurrentStockState() {
+    @Override
+    public Mono<String> publishCurrentStockState(String assignedId) {
         return stockRepo.findAll()
                 .collectMap(InstrumentEntry::name, InstrumentEntry::amount)
                 .flatMap(map -> {
                     try {
                         return Mono.just(
-                                new FixStockStateReport(assignedId,
+                                new FixStockStateReport(
+                                        assignedId,
                                         objectMapper.writeValueAsString(map)
                                 ).asFix()
                         );
@@ -164,44 +76,8 @@ public class ExchangeServiceImpl {
                 });
     }
 
-    private Mono<Void> sendStateMessage() {
-        return publishCurrentStockState()
-                .flatMap(stateReport -> {
-                    log.debug("Sending state report: {}", stateReport);
-                    return connection.outbound()
-                            .sendString(Mono.just(stateReport), StandardCharsets.UTF_8)
-                            .then();
-                });
-    }
-
-    private Mono<Void> prepareSendResponse(FixRequest request) {
-        return processTradeRequest(request)
-                .flatMap(response -> {
-                    try {
-                        log.debug("Sending response: {}", response.asFix());
-                        Publisher<String> to_send;
-                        if (response.getOrdStatus() == FixResponse.MSG_ORD_FILLED) {
-                            to_send = Flux.concat(
-                                    Mono.just(response.asFix()),
-                                    publishCurrentStockState()
-                            );
-                        } else {
-                            to_send = Mono.just(response.asFix());
-                        }
-                        return connection.outbound()
-                                .sendString(to_send, StandardCharsets.UTF_8)
-                                .then();
-                    } catch (FixMessageMisconfiguredException e) {
-                        log.error("Response assembly failed. This can't happen.");
-                        return Mono.empty();
-                    }
-                }).doOnError(e -> log.error(
-                        "Failed to process or respond to trade request: {}",
-                        e.getMessage())
-                ).then();
-    }
-
-    public Mono<FixResponse> processTradeRequest(FixRequest request) {
+    @Override
+    public Mono<FixResponse> processTradeRequest(FixRequest request, String assignedId) {
         try {
             FixResponse response = new FixResponse(
                     assignedId,                 // sender

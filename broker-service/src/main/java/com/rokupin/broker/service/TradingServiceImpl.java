@@ -152,7 +152,6 @@ public class TradingServiceImpl implements TradingService {
         } catch (JsonProcessingException e) {
             log.warn("TCPService: received initial stock state JSON parsing failed");
         }
-
         return Mono.empty();
     }
 
