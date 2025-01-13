@@ -31,7 +31,6 @@ public class RouterServiceImpl {
 
     private final TcpServer brokerServer;
     private final TcpServer exchangeServer;
-    private final String id;
     private final Map<String, Map<String, Integer>> stateCache;
     private final CommunicationKit brokerCommunicationKit;
     private final CommunicationKit exchangeCommunicationKit;
@@ -44,8 +43,6 @@ public class RouterServiceImpl {
                              @Value("${router.tcp.exchange.host}") String exchangeHost,
                              @Value("${router.tcp.exchange.port}") int exchangePort,
                              @Value("${router.id}") String id) {
-
-        this.id = id;
         this.objectMapper = objectMapper;
         this.brokerCommunicationKit = brokerCommunicationKit;
         this.exchangeCommunicationKit = exchangeCommunicationKit;
@@ -58,9 +55,9 @@ public class RouterServiceImpl {
     @PostConstruct
     private void init() {
         initServer(brokerServer, this::doOnBrokerConnection,
-                brokerCommunicationKit.getIdToMsgProcessor());
+                brokerCommunicationKit.getIdToMsgProcessorMap());
         initServer(exchangeServer, this::doOnExchangeConnection,
-                exchangeCommunicationKit.getIdToMsgProcessor());
+                exchangeCommunicationKit.getIdToMsgProcessorMap());
     }
 
     private void initServer(TcpServer server,
@@ -175,7 +172,7 @@ public class RouterServiceImpl {
 
     private Publisher<Void> broadcastToBrokers(String message) {
         Map<String, Connection> brokerConnections =
-                    brokerCommunicationKit.getIdToConnection();
+                    brokerCommunicationKit.getIdToConnectionMap();
         return Flux.fromIterable(brokerConnections.entrySet())
                 .flatMap(entry -> forwardResponseToTargetBroker(
                         entry.getValue().outbound(), entry.getKey(), message)

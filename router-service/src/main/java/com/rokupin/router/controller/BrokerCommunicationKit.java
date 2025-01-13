@@ -3,7 +3,6 @@ package com.rokupin.router.controller;
 import com.rokupin.model.fix.FixIdAssignationStockState;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixMessageProcessor;
-import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
@@ -11,8 +10,6 @@ import reactor.netty.Connection;
 import reactor.netty.NettyOutbound;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -35,7 +32,7 @@ public class BrokerCommunicationKit extends CommunicationKit {
                 .flatMap(handlerCallback)
                 .onErrorResume(e -> errorCallback.apply(e, connection.outbound()))
                 .subscribe();
-        idToMsgProcessor.put(newBrokerId, brokerInputProcessor);
+        idToMsgProcessorMap.put(newBrokerId, brokerInputProcessor);
 
         connection.outbound()
                 .sendString(
@@ -45,7 +42,7 @@ public class BrokerCommunicationKit extends CommunicationKit {
                 .subscribe();
 
         connection.channel().attr(ASSIGNED_ID_KEY).set(newBrokerId);
-        idToConnection.put(newBrokerId, connection);
+        idToConnectionMap.put(newBrokerId, connection);
     }
 
     private Mono<String> publishWelcomeMsg(String serializedState, String newId) {

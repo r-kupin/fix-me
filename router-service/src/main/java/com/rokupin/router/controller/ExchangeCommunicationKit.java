@@ -3,7 +3,6 @@ package com.rokupin.router.controller;
 import com.rokupin.model.fix.FixIdAssignation;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixMessageProcessor;
-import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
@@ -11,8 +10,6 @@ import reactor.netty.Connection;
 import reactor.netty.NettyOutbound;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -37,7 +34,7 @@ public class ExchangeCommunicationKit extends CommunicationKit{
                         "Exchange service interaction went wrong: {}",
                         e.getMessage())
                 ).subscribe();
-        idToMsgProcessor.put(newExchangeId, exchangeInputProcessor);
+        idToMsgProcessorMap.put(newExchangeId, exchangeInputProcessor);
 
         connection.outbound()
                 .sendString(
@@ -46,7 +43,7 @@ public class ExchangeCommunicationKit extends CommunicationKit{
                 ).then()
                 .subscribe();
         connection.channel().attr(ASSIGNED_ID_KEY).set(newExchangeId);
-        idToConnection.put(newExchangeId, connection);
+        idToConnectionMap.put(newExchangeId, connection);
     }
 
     private Mono<String> publishWelcomeMsg(String newId) {
