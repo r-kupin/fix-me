@@ -17,7 +17,6 @@ import reactor.netty.NettyOutbound;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public abstract class RouterService {
@@ -29,9 +28,9 @@ public abstract class RouterService {
 
     public RouterService(ObjectMapper objectMapper,
                          CommunicationKit brokerCommunicationKit,
-                         CommunicationKit exchangeCommunicationKit) {
-        // todo: One stateCache for all!
-        this.stateCache = new ConcurrentHashMap<>();
+                         CommunicationKit exchangeCommunicationKit,
+                         Map<String, Map<String, Integer>> stateCache) {
+        this.stateCache = stateCache;
         this.objectMapper = objectMapper;
         this.brokerCommunicationKit = brokerCommunicationKit;
         this.exchangeCommunicationKit = exchangeCommunicationKit;

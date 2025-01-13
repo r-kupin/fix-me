@@ -40,5 +40,4 @@ public abstract class CommunicationKit {
     public void remove(String id) {
         idToConnectionMap.remove(id);
     }
-
 }

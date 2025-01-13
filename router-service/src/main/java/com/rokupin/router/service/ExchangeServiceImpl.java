@@ -21,10 +21,12 @@ public class ExchangeServiceImpl extends RouterService {
 
     public ExchangeServiceImpl(ObjectMapper objectMapper,
                                CommunicationKit brokerCommunicationKit,
-                               CommunicationKit exchangeCommunicationKit) {
+                               CommunicationKit exchangeCommunicationKit,
+                               Map<String, Map<String, Integer>> stateCache) {
         super(objectMapper,
                 brokerCommunicationKit,
-                exchangeCommunicationKit);
+                exchangeCommunicationKit,
+                stateCache);
     }
 
     @Override

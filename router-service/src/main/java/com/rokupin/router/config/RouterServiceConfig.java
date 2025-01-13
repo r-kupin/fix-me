@@ -1,21 +1,28 @@
 package com.rokupin.router.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.router.service.fix.BrokerCommunicationKit;
-import com.rokupin.router.service.fix.CommunicationKit;
-import com.rokupin.router.service.fix.ExchangeCommunicationKit;
 import com.rokupin.router.controller.TcpController;
 import com.rokupin.router.service.BrokerServiceImpl;
 import com.rokupin.router.service.ExchangeServiceImpl;
 import com.rokupin.router.service.RouterService;
+import com.rokupin.router.service.fix.BrokerCommunicationKit;
+import com.rokupin.router.service.fix.CommunicationKit;
+import com.rokupin.router.service.fix.ExchangeCommunicationKit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.config.EnableWebFlux;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Configuration
 @EnableWebFlux
 public class RouterServiceConfig {
+    @Bean
+    Map<String, Map<String, Integer>> stateCache() {
+        return new ConcurrentHashMap<>();
+    }
 
     @Bean
     CommunicationKit brokerCommunicationKit(@Value("${router.id}") String routerId) {
@@ -30,19 +37,23 @@ public class RouterServiceConfig {
     @Bean
     RouterService brokerRoutingService(ObjectMapper objectMapper,
                                        CommunicationKit brokerCommunicationKit,
-                                       CommunicationKit exchangeCommunicationKit) {
+                                       CommunicationKit exchangeCommunicationKit,
+                                       Map<String, Map<String, Integer>> stateCache) {
         return new BrokerServiceImpl(objectMapper,
                 brokerCommunicationKit,
-                exchangeCommunicationKit);
+                exchangeCommunicationKit,
+                stateCache);
     }
 
     @Bean
     RouterService exchangeRoutingService(ObjectMapper objectMapper,
                                          CommunicationKit brokerCommunicationKit,
-                                         CommunicationKit exchangeCommunicationKit) {
+                                         CommunicationKit exchangeCommunicationKit,
+                                         Map<String, Map<String, Integer>> stateCache) {
         return new ExchangeServiceImpl(objectMapper,
                 brokerCommunicationKit,
-                exchangeCommunicationKit);
+                exchangeCommunicationKit,
+                stateCache);
     }
 
     @Bean

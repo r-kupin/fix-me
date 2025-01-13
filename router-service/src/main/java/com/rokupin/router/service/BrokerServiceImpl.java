@@ -11,6 +11,7 @@ import reactor.netty.Connection;
 import reactor.netty.NettyOutbound;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -18,10 +19,12 @@ public class BrokerServiceImpl extends RouterService {
 
     public BrokerServiceImpl(ObjectMapper objectMapper,
                              CommunicationKit brokerCommunicationKit,
-                             CommunicationKit exchangeCommunicationKit) {
+                             CommunicationKit exchangeCommunicationKit,
+                             Map<String, Map<String, Integer>> stateCache) {
         super(objectMapper,
                 brokerCommunicationKit,
-                exchangeCommunicationKit);
+                exchangeCommunicationKit,
+                stateCache);
     }
 
     @Override
