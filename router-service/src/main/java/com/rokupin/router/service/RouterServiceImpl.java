@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.model.fix.*;
+import com.rokupin.router.controller.CommunicationKit;
+import com.rokupin.router.controller.ExchangeConnectivityFailure;
+import com.rokupin.router.controller.OnConnectionHandler;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
@@ -19,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -29,9 +33,11 @@ public class RouterServiceImpl {
     private final TcpServer exchangeServer;
     private final String id;
     private final Map<String, Map<String, Integer>> stateCache;
-    private final CommunicationKit communicationKit;
+    private final CommunicationKit brokerCommunicationKit;
+    private final CommunicationKit exchangeCommunicationKit;
 
-    public RouterServiceImpl(CommunicationKit communicationKit,
+    public RouterServiceImpl(CommunicationKit brokerCommunicationKit,
+                             CommunicationKit exchangeCommunicationKit,
                              ObjectMapper objectMapper,
                              @Value("${router.tcp.broker.host}") String brokerHost,
                              @Value("${router.tcp.broker.port}") int brokerPort,
@@ -41,7 +47,8 @@ public class RouterServiceImpl {
 
         this.id = id;
         this.objectMapper = objectMapper;
-        this.communicationKit = communicationKit;
+        this.brokerCommunicationKit = brokerCommunicationKit;
+        this.exchangeCommunicationKit = exchangeCommunicationKit;
 
         stateCache = new ConcurrentHashMap<>();
         brokerServer = TcpServer.create().host(brokerHost).port(brokerPort);
@@ -50,17 +57,18 @@ public class RouterServiceImpl {
 
     @PostConstruct
     private void init() {
-        brokerServer.doOnConnection(this::doOnBrokerConnection)
-                .doOnConnection(new OnConnectionHandler(
-                        communicationKit.getBrokerInputProcessors())
-                ).bindNow()
-                .onDispose()
-                .subscribe();
+        initServer(brokerServer, this::doOnBrokerConnection,
+                brokerCommunicationKit.getIdToMsgProcessor());
+        initServer(exchangeServer, this::doOnExchangeConnection,
+                exchangeCommunicationKit.getIdToMsgProcessor());
+    }
 
-        exchangeServer.doOnConnection(this::doOnExchangeConnection)
-                .doOnConnection(new OnConnectionHandler(
-                        communicationKit.getExchangeInputProcessors())
-                ).bindNow()
+    private void initServer(TcpServer server,
+                            Consumer<Connection> onConnection,
+                            Map<String, FixMessageProcessor> inputProcessorsMap) {
+        server.doOnConnection(onConnection)
+                .doOnConnection(new OnConnectionHandler(inputProcessorsMap))
+                .bindNow()
                 .onDispose()
                 .subscribe();
     }
@@ -68,7 +76,7 @@ public class RouterServiceImpl {
     private void doOnBrokerConnection(Connection connection) {
         try {
             String state = objectMapper.writeValueAsString(stateCache);
-            communicationKit.newBrokerConnection(connection,
+            brokerCommunicationKit.newConnection(connection,
                     state,
                     this::handleBrokerInput,
                     this::handleBrokerCommunicationError
@@ -79,7 +87,10 @@ public class RouterServiceImpl {
     }
 
     private void doOnExchangeConnection(Connection connection) {
-        communicationKit.newExchangeConnection(connection, this::handleExchangeInput);
+        exchangeCommunicationKit.newConnection(connection,
+                null,
+                this::handleExchangeInput,
+                null);
     }
 
 // -------------------------- Exchange connectivity
@@ -133,7 +144,8 @@ public class RouterServiceImpl {
             FixResponse response = FixMessage.fromFix(input, new FixResponse());
             boolean stateModified = updateStateFromTradingResponse(response);
 
-            Connection connection = communicationKit.getBrokerConnection(response.getTarget());
+            Connection connection = brokerCommunicationKit.getConnectionById(response.getTarget());
+
             if (Objects.isNull(connection)) {
                 log.warn("Target broker {} not connected for trading response", response.getTarget());
                 return Mono.empty();
@@ -162,7 +174,9 @@ public class RouterServiceImpl {
 // ---------------- Sending data to brokers
 
     private Publisher<Void> broadcastToBrokers(String message) {
-        return Flux.fromIterable(communicationKit.allBrokerConnections())
+        Map<String, Connection> brokerConnections =
+                    brokerCommunicationKit.getIdToConnection();
+        return Flux.fromIterable(brokerConnections.entrySet())
                 .flatMap(entry -> forwardResponseToTargetBroker(
                         entry.getValue().outbound(), entry.getKey(), message)
                 );
@@ -178,7 +192,7 @@ public class RouterServiceImpl {
                 .onErrorResume(e -> {
                     log.warn("Failed to send to {}. Removing connection: {}",
                             brokerId, e.getMessage());
-                    communicationKit.removeBroker(brokerId);
+                    brokerCommunicationKit.remove(brokerId);
                     return Mono.empty();
                 });
     }
@@ -197,7 +211,7 @@ public class RouterServiceImpl {
     private boolean updateStateFromTradingResponse(FixResponse response) {
         if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE &&
                 stateCache.containsKey(response.getSender())) {
-            communicationKit.removeExchange(response.getSender());
+            exchangeCommunicationKit.remove(response.getSender());
             stateCache.remove(response.getSender());
             return true;
         }
@@ -222,7 +236,7 @@ public class RouterServiceImpl {
     private Publisher<Void> handleUpdateRequest(String input) throws FixMessageMisconfiguredException {
         FixStateUpdateRequest request = FixMessage.fromFix(input, new FixStateUpdateRequest());
         String sender = request.getSender();
-        Connection brokerConnection = communicationKit.getBrokerConnection(sender);
+        Connection brokerConnection = brokerCommunicationKit.getConnectionById(sender);
 
         if (Objects.nonNull(brokerConnection)) {
             return forwardResponseToTargetBroker(
@@ -231,7 +245,7 @@ public class RouterServiceImpl {
                     makeStateUpdateMsgString()
             );
         } else {
-            communicationKit.removeBroker(sender);
+            brokerCommunicationKit.remove(sender);
             return Mono.empty();
         }
     }
@@ -239,7 +253,7 @@ public class RouterServiceImpl {
     private Publisher<Void> handleTradingRequest(String input) throws FixMessageMisconfiguredException {
         FixRequest request = FixMessage.fromFix(input, new FixRequest());
         String target = request.getTarget();
-        Connection exchangeConnection = communicationKit.getExchangeConnection(target);
+        Connection exchangeConnection = exchangeCommunicationKit.getConnectionById(target);
 
         if (Objects.nonNull(exchangeConnection)) {
             return exchangeConnection.outbound()

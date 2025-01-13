@@ -1,4 +1,4 @@
-package com.rokupin.router.service;
+package com.rokupin.router.controller;
 
 import com.rokupin.model.fix.FixMessageProcessor;
 import reactor.core.publisher.Mono;
@@ -19,7 +19,7 @@ public class OnConnectionHandler implements Consumer<Connection> {
     @Override
     public void accept(Connection connection) {
         String id = connection.channel()
-                .attr(CommunicationKit.ASSIGNED_ID_KEY)
+                .attr(BrokerCommunicationKit.ASSIGNED_ID_KEY)
                 .get();
 
         FixMessageProcessor inputProcessor = inputProcessors.get(id);

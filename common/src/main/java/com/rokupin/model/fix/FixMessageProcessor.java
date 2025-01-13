@@ -18,7 +18,6 @@ public class FixMessageProcessor {
         StringBuilder currentMessage = new StringBuilder();
         String[] parts = buffer.toString().split("\u0001");
 
-
         for (int i = 0; i < parts.length; i++) {
             currentMessage.append(parts[i]);
             if (parts[i].startsWith("10=")) { // last part of msg
@@ -26,9 +25,8 @@ public class FixMessageProcessor {
                     currentMessage.append("\u0001");
                     sink.tryEmitNext(currentMessage.toString());
                     currentMessage.setLength(0);
-                    if (i == parts.length - 1) {
+                    if (i == parts.length - 1)
                         buffer.setLength(0);
-                    }
                 } else {
                     buffer = currentMessage;
                 }
