@@ -6,8 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.model.fix.FixMessage;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixStockStateReport;
-import com.rokupin.router.controller.CommunicationKit;
-import jakarta.annotation.PostConstruct;
+import com.rokupin.router.service.fix.CommunicationKit;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
@@ -18,30 +17,29 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
-public class ExchangeService extends RouterService {
+public class ExchangeServiceImpl extends RouterService {
 
-    public ExchangeService(String host, int port,
-                           ObjectMapper objectMapper,
-                           CommunicationKit brokerCommunicationKit,
-                           CommunicationKit exchangeCommunicationKit) {
-        super(host, port,
-                objectMapper,
+    public ExchangeServiceImpl(ObjectMapper objectMapper,
+                               CommunicationKit brokerCommunicationKit,
+                               CommunicationKit exchangeCommunicationKit) {
+        super(objectMapper,
                 brokerCommunicationKit,
                 exchangeCommunicationKit);
     }
 
-
-    @PostConstruct
-    private void init() {
-        initServer(exchangeCommunicationKit);
-    }
-
     @Override
-    protected void doOnConnection(Connection connection) {
+    public void doOnConnection(Connection connection) {
         exchangeCommunicationKit.newConnection(connection,
                 null,
                 this::handleExchangeInput,
                 null);
+    }
+
+    @Override
+    public OnConnectionHandler getConnectionHandler() {
+        return new OnConnectionHandler(
+                exchangeCommunicationKit.getIdToMsgProcessorMap()
+        );
     }
 
     private Publisher<Void> handleExchangeInput(String input) {

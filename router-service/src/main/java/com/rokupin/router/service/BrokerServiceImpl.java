@@ -3,9 +3,7 @@ package com.rokupin.router.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.model.fix.*;
-import com.rokupin.router.controller.CommunicationKit;
-import com.rokupin.router.controller.ExchangeConnectivityFailure;
-import jakarta.annotation.PostConstruct;
+import com.rokupin.router.service.fix.CommunicationKit;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
@@ -16,25 +14,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 @Slf4j
-public class BrokerService extends RouterService {
+public class BrokerServiceImpl extends RouterService {
 
-    public BrokerService(String host, int port,
-                         ObjectMapper objectMapper,
-                         CommunicationKit brokerCommunicationKit,
-                         CommunicationKit exchangeCommunicationKit) {
-        super(host, port,
-                objectMapper,
+    public BrokerServiceImpl(ObjectMapper objectMapper,
+                             CommunicationKit brokerCommunicationKit,
+                             CommunicationKit exchangeCommunicationKit) {
+        super(objectMapper,
                 brokerCommunicationKit,
                 exchangeCommunicationKit);
     }
 
-    @PostConstruct
-    private void init() {
-        initServer(brokerCommunicationKit);
-    }
-
     @Override
-    protected void doOnConnection(Connection connection) {
+    public void doOnConnection(Connection connection) {
         try {
             String state = objectMapper.writeValueAsString(stateCache);
             brokerCommunicationKit.newConnection(connection,
@@ -45,6 +36,13 @@ public class BrokerService extends RouterService {
         } catch (JsonProcessingException e) {
             log.error("Cant serialize cache map");
         }
+    }
+
+    @Override
+    public OnConnectionHandler getConnectionHandler() {
+        return new OnConnectionHandler(
+                brokerCommunicationKit.getIdToMsgProcessorMap()
+        );
     }
 
     private Publisher<Void> handleBrokerInput(String input) {

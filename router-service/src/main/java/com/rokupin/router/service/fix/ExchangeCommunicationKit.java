@@ -1,4 +1,4 @@
-package com.rokupin.router.controller;
+package com.rokupin.router.service.fix;
 
 import com.rokupin.model.fix.FixIdAssignation;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;

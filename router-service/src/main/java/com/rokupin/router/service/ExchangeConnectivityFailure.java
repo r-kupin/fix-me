@@ -1,4 +1,4 @@
-package com.rokupin.router.controller;
+package com.rokupin.router.service;
 
 public class ExchangeConnectivityFailure extends Exception {
 

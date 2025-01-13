@@ -6,15 +6,13 @@ import com.rokupin.model.fix.FixMessage;
 import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixResponse;
 import com.rokupin.model.fix.FixStockStateReport;
-import com.rokupin.router.controller.CommunicationKit;
-import com.rokupin.router.controller.OnConnectionHandler;
+import com.rokupin.router.service.fix.CommunicationKit;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 import reactor.netty.NettyOutbound;
-import reactor.netty.tcp.TcpServer;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -23,34 +21,25 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public abstract class RouterService {
-    protected final TcpServer server;
     protected final ObjectMapper objectMapper;
     protected final Map<String, Map<String, Integer>> stateCache;
     protected final CommunicationKit brokerCommunicationKit;
     protected final CommunicationKit exchangeCommunicationKit;
 
 
-    public RouterService(String host, int port,
-                         ObjectMapper objectMapper,
+    public RouterService(ObjectMapper objectMapper,
                          CommunicationKit brokerCommunicationKit,
                          CommunicationKit exchangeCommunicationKit) {
-        this.server = TcpServer.create().host(host).port(port);
+        // todo: One stateCache for all!
         this.stateCache = new ConcurrentHashMap<>();
         this.objectMapper = objectMapper;
         this.brokerCommunicationKit = brokerCommunicationKit;
         this.exchangeCommunicationKit = exchangeCommunicationKit;
     }
 
-    protected void initServer(CommunicationKit primaryCommunicationKit) {
-        server.doOnConnection(this::doOnConnection)
-                .doOnConnection(new OnConnectionHandler(
-                        primaryCommunicationKit.getIdToMsgProcessorMap())
-                ).bindNow()
-                .onDispose()
-                .subscribe();
-    }
+    public abstract void doOnConnection(Connection connection);
 
-    protected abstract void doOnConnection(Connection connection);
+    public abstract OnConnectionHandler getConnectionHandler();
 
     protected String makeStateUpdateMsgString(String id) {
         try {
@@ -120,7 +109,6 @@ public abstract class RouterService {
                     return Mono.empty();
                 });
     }
-
 
     private boolean updateStateFromTradingResponse(FixResponse response) {
         if (response.getRejectionReason() == FixResponse.EXCHANGE_IS_NOT_AVAILABLE &&
