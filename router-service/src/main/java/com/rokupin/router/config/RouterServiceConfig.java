@@ -8,6 +8,7 @@ import com.rokupin.router.service.RouterService;
 import com.rokupin.router.service.fix.BrokerCommunicationKit;
 import com.rokupin.router.service.fix.CommunicationKit;
 import com.rokupin.router.service.fix.ExchangeCommunicationKit;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,9 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Configuration
 @EnableWebFlux
 public class RouterServiceConfig {
-    @Bean
-    Map<String, Map<String, Integer>> stateCache() {
-        return new ConcurrentHashMap<>();
+
+    private final Map<String, Map<String, Integer>> stateCache;
+
+    public RouterServiceConfig() {
+        this.stateCache = new ConcurrentHashMap<>();
     }
 
     @Bean
@@ -36,9 +39,8 @@ public class RouterServiceConfig {
 
     @Bean
     RouterService brokerRoutingService(ObjectMapper objectMapper,
-                                       CommunicationKit brokerCommunicationKit,
-                                       CommunicationKit exchangeCommunicationKit,
-                                       Map<String, Map<String, Integer>> stateCache) {
+                                       @Qualifier("brokerCommunicationKit") CommunicationKit brokerCommunicationKit,
+                                       @Qualifier("exchangeCommunicationKit") CommunicationKit exchangeCommunicationKit) {
         return new BrokerServiceImpl(objectMapper,
                 brokerCommunicationKit,
                 exchangeCommunicationKit,
@@ -47,9 +49,8 @@ public class RouterServiceConfig {
 
     @Bean
     RouterService exchangeRoutingService(ObjectMapper objectMapper,
-                                         CommunicationKit brokerCommunicationKit,
-                                         CommunicationKit exchangeCommunicationKit,
-                                         Map<String, Map<String, Integer>> stateCache) {
+                                         @Qualifier("brokerCommunicationKit") CommunicationKit brokerCommunicationKit,
+                                         @Qualifier("exchangeCommunicationKit") CommunicationKit exchangeCommunicationKit) {
         return new ExchangeServiceImpl(objectMapper,
                 brokerCommunicationKit,
                 exchangeCommunicationKit,
@@ -59,14 +60,14 @@ public class RouterServiceConfig {
     @Bean
     TcpController brokerController(@Value("${router.tcp.broker.host}") String host,
                                    @Value("${router.tcp.broker.port}") int port,
-                                   RouterService brokerRoutingService) {
+                                   @Qualifier("brokerRoutingService") RouterService brokerRoutingService) {
         return new TcpController(host, port, brokerRoutingService);
     }
 
     @Bean
     TcpController exchangeController(@Value("${router.tcp.exchange.host}") String host,
                                      @Value("${router.tcp.exchange.port}") int port,
-                                     RouterService exchangeRoutingService) {
+                                     @Qualifier("exchangeRoutingService") RouterService exchangeRoutingService) {
         return new TcpController(host, port, exchangeRoutingService);
     }
 }
