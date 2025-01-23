@@ -1,12 +1,14 @@
 package com.rokupin.broker.service;
 
-import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.ClientTradingRequest;
 import reactor.core.publisher.Mono;
 
 public interface TradingService {
-    void initiateRouterConnection();
+    void            handleMessageFromRouter(String message);
+    String          handleMessageFromClient(ClientTradingRequest clientMsg,
+                                            String clientId);
 
-    Mono<String> handleTradingRequest(FixRequest message);
-
-    Mono<String> getState();
+    String          getAssignedId();
+    void            setAssignedId(String id);
+    Mono<String>    getState();
 }

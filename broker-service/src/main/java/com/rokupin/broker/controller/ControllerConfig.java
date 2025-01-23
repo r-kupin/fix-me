@@ -1,4 +1,4 @@
-package com.rokupin.broker.handlers;
+package com.rokupin.broker.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -15,12 +15,15 @@ import java.util.Map;
 @Configuration
 @EnableWebFlux
 @Slf4j
-public class WebSocketConfig {
+public class ControllerConfig {
 
-    private final TradingWebSocketHandler tradingWebSocketHandler;
+    private final WebSocketController   webSocketController;
+    private final TcpController         tcpController;
 
-    public WebSocketConfig(TradingWebSocketHandler tradingWebSocketHandler) {
-        this.tradingWebSocketHandler = tradingWebSocketHandler;
+    public ControllerConfig(WebSocketController webSocketController,
+                            TcpController tcpController) {
+        this.webSocketController = webSocketController;
+        this.tcpController = tcpController;
     }
 
     @Bean
@@ -31,7 +34,7 @@ public class WebSocketConfig {
     @Bean
     HandlerMapping handlerMapping() {
         Map<String, WebSocketHandler> handlers = new HashMap<>();
-        handlers.put("/ws/requests", tradingWebSocketHandler);
+        handlers.put("/ws/requests", webSocketController);
         return new SimpleUrlHandlerMapping() {
             {
                 setUrlMap(handlers);

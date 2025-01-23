@@ -1,6 +1,8 @@
 package com.rokupin.broker.events;
 
 import com.rokupin.broker.model.StocksStateMessage;
+import com.rokupin.model.fix.FixMessage;
+import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -21,13 +23,19 @@ public class EventConfig {
     }
 
     @Bean
-    public Consumer<FluxSink<InputEvent<StocksStateMessage>>> stockStateUpdateEventPublisher(
+    public Consumer<FluxSink<BrokerEvent<StocksStateMessage>>> stockStateUpdateEventPublisher(
             @Qualifier("eventPublisherExecutor") Executor executor) {
         return new InputEventPublisher<>(executor);
     }
 
     @Bean
-    public Consumer<FluxSink<InputEvent<FixResponse>>> tradeResponseEventPublisher(
+    public Consumer<FluxSink<BrokerEvent<FixResponse>>> tradeResponseEventPublisher(
+            @Qualifier("eventPublisherExecutor") Executor executor) {
+        return new InputEventPublisher<>(executor);
+    }
+
+    @Bean
+    public Consumer<FluxSink<BrokerEvent<FixMessage>>> tradeRequestEventPublisher(
             @Qualifier("eventPublisherExecutor") Executor executor) {
         return new InputEventPublisher<>(executor);
     }

@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  */
 @SuppressWarnings("rawtypes")
 @Component
-public class InputEventPublisher<E extends InputEvent> implements
+public class InputEventPublisher<E extends BrokerEvent> implements
         ApplicationListener<E>, Consumer<FluxSink<E>> {
 
     private final Executor executor;

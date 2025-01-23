@@ -29,6 +29,7 @@ public class FixResponse extends FixMessage {
     public static final int EXCHANGE_LACKS_REQUESTED_AMOUNT = 4;
     public static final int ACTION_UNSUPPORTED = 5;
     public static final int TOO_MUCH = 6;
+    public static final int SEND_FAILED = 7;
 
     private String msgType;         // MsgType (35)
     private String sender;          // SenderCompID (49)
@@ -112,9 +113,9 @@ public class FixResponse extends FixMessage {
                     "OrdStatus (39) should be 0 (New), 2 (Filled) or 8 (Rejected)." +
                             " Provided: '" + ordStatus + "'");
 
-        if (rejectionReason < 0 || rejectionReason > 6)
+        if (rejectionReason < 0 || rejectionReason > 7)
             throw new FixMessageMisconfiguredException(
-                    "OrdRejReason (103) should be >= 0 and <= 6 Provided: '" +
+                    "OrdRejReason (103) should be >= 0 and <= 7 Provided: '" +
                             rejectionReason + "'");
 
         if (!msgType.equals(MSG_EXECUTION_REPORT))
@@ -131,6 +132,7 @@ public class FixResponse extends FixMessage {
             case EXCHANGE_LACKS_REQUESTED_AMOUNT -> "Target exchange doesn't possess requested quantity";
             case ACTION_UNSUPPORTED -> "Action (side) should be either 1 or 2";
             case TOO_MUCH -> "Target exchange limits it's amount of the instrument being sold.";
+            case SEND_FAILED -> "Target service can't be reached";
             default -> "Reason unknown";
         };
     }

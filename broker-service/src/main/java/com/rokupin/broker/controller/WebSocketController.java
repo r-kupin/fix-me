@@ -1,13 +1,13 @@
-package com.rokupin.broker.handlers;
+package com.rokupin.broker.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rokupin.broker.events.InputEvent;
+import com.rokupin.broker.events.BrokerEvent;
+import com.rokupin.broker.model.RequestSendingReport;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.broker.service.TradingService;
 import com.rokupin.model.fix.*;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -21,29 +21,23 @@ import reactor.core.publisher.SignalType;
 import java.util.EventObject;
 import java.util.function.Consumer;
 
-@Component
 @Slf4j
-public class TradingWebSocketHandler implements WebSocketHandler {
-
+@Component
+public class WebSocketController implements WebSocketHandler {
 
     private final TradingService tradingService;
     private final ObjectMapper objectMapper;
-    private final Flux<InputEvent<StocksStateMessage>> stockStateUpdateEventFlux;
-    private final Flux<InputEvent<FixResponse>> tradeResponseEventFlux;
+    private final Flux<BrokerEvent<StocksStateMessage>> stockStateUpdateEventFlux;
+    private final Flux<BrokerEvent<FixResponse>> tradeResponseEventFlux;
 
-    public TradingWebSocketHandler(TradingService tradingService,
-                                   ObjectMapper objectMapper,
-                                   Consumer<FluxSink<InputEvent<StocksStateMessage>>> stockStateUpdateEventPublisher,
-                                   Consumer<FluxSink<InputEvent<FixResponse>>> tradeResponseEventPublisher) {
+    public WebSocketController(TradingService tradingService,
+                               ObjectMapper objectMapper,
+                               Consumer<FluxSink<BrokerEvent<StocksStateMessage>>> stockStateUpdateEventPublisher,
+                               Consumer<FluxSink<BrokerEvent<FixResponse>>> tradeResponseEventPublisher) {
         this.tradingService = tradingService;
         this.objectMapper = objectMapper;
         this.stockStateUpdateEventFlux = Flux.create(stockStateUpdateEventPublisher).share();
         this.tradeResponseEventFlux = Flux.create(tradeResponseEventPublisher).share();
-    }
-
-    @PostConstruct
-    private void init() {
-        tradingService.initiateRouterConnection();
     }
 
     @Override
@@ -56,9 +50,16 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         Flux<WebSocketMessage> onTradeResponse = handleTradeResponseEvent(session);
         Flux<WebSocketMessage> onClientMessage = handleClientInput(session);
 
-        return session.send(combineOutputs(onConnection, onClientMessage, onStateUpdate, onTradeResponse, sessionId))
-                .doOnError(e -> log.error("WSHandler [{}]: encountered error: {}", sessionId, e.getMessage()))
-                .doFinally(handleSessionShutdown(session));
+        return session.send(combineOutputs(onConnection,
+                        onClientMessage,
+                        onStateUpdate,
+                        onTradeResponse,
+                        sessionId)
+                ).doOnError(e -> log.error(
+                        "WSHandler [{}]: encountered error: {}",
+                        sessionId,
+                        e.getMessage())
+                ).doFinally(handleSessionShutdown(session));
     }
 
     private Flux<WebSocketMessage> combineOutputs(Mono<WebSocketMessage> onConnection,
@@ -69,18 +70,34 @@ public class TradingWebSocketHandler implements WebSocketHandler {
         return Flux.concat(onConnection, onClientMessage
                         .mergeWith(onStateUpdate)
                         .mergeWith(onTradeResponse))
-                .doOnError(e -> log.error("WSHandler [{}]: error in combined stream: {}", sessionId, e.getMessage()))
-                .doOnCancel(() -> log.info("WSHandler [{}]: canceled by client", sessionId))
-                .doOnTerminate(() -> log.info("WSHandler [{}]: combined stream completed for ", sessionId));
+                .doOnError(e -> log.error(
+                        "WSHandler [{}]: error in combined stream: {}",
+                        sessionId,
+                        e.getMessage())
+                ).doOnCancel(() -> log.info(
+                        "WSHandler [{}]: canceled by client",
+                        sessionId)
+                ).doOnTerminate(() -> log.info(
+                        "WSHandler [{}]: combined stream completed for ",
+                        sessionId)
+                );
     }
 
+    //  todo refactor
     private Consumer<SignalType> handleSessionShutdown(WebSocketSession session) {
         return signalType -> {
-            log.info("WSHandler [{}]: cleanup triggered with signal: {}", session.getId(), signalType);
+            log.info("WSHandler [{}]: cleanup triggered with signal: {}",
+                    session.getId(),
+                    signalType);
             session.close()
-                    .doOnSuccess(aVoid -> log.info("WSHandler [{}]: session closed successfully", session.getId()))
-                    .doOnError(e -> log.error("WSHandler [{}]: ailed to close session: {}", session.getId(), e.getMessage()))
-                    .subscribe();
+                    .doOnSuccess(aVoid -> log.info(
+                            "WSHandler [{}]: session closed successfully",
+                            session.getId())
+                    ).doOnError(e -> log.error(
+                            "WSHandler [{}]: failed to close session: {}",
+                            session.getId(),
+                            e.getMessage())
+                    ).subscribe();
         };
     }
 
@@ -161,32 +178,37 @@ public class TradingWebSocketHandler implements WebSocketHandler {
                 .flatMap(msg -> clientInputHandler(msg, session));
     }
 
-    private Mono<WebSocketMessage> clientInputHandler(String msg, WebSocketSession session) {
-        Mono<String> response_msg;
-        log.info("WSHandler [{}]: processing request '{}'",
-                session.getId(), msg);
+    private Mono<WebSocketMessage> clientInputHandler(String msg,
+                                                      WebSocketSession session) {
+        String report;
+
+        log.info("WSHandler [{}]: processing request '{}'", session.getId(), msg);
+
         try {
-            ClientTradingRequest clientMsg = objectMapper.readValue(msg, ClientTradingRequest.class);
-            FixRequest request = new FixRequest(clientMsg);
-            request.setSenderSubId(session.getId());
-            response_msg = tradingService.handleTradingRequest(request);
+            ClientTradingRequest clientMsg = objectMapper.readValue(msg,
+                    ClientTradingRequest.class
+            );
+            report = tradingService.handleMessageFromClient(clientMsg, session.getId());
         } catch (JsonMappingException e) {
             log.warn("WSHandler [{}]: Mapping failed: {}",
                     session.getId(), e.toString());
-            response_msg = Mono.just("Trading request not sent:" +
-                    " mapping to FIX message failed: " + e);
+            report = "Mapping to FIX failed: " + e;
         } catch (JsonProcessingException e) {
             log.warn("WSHandler [{}]: JSON parsing failed: {}",
                     session.getId(), e.toString());
-            response_msg = Mono.just("Trading request not sent:" +
-                    " JSON syntax is incorrect: " + e);
-        } catch (FixMessageMisconfiguredException e) {
-            log.warn("WSHandler [{}]: Fix Request creation failed: {}",
-                    session.getId(), e.toString());
-            response_msg = Mono.just("Trading request not sent:" +
-                    " provided input can't be converted to the Fix Request. Reason: '" +
-                    e.getMessage() + "'");
+            report = "JSON syntax is incorrect: " + e;
         }
-        return response_msg.map(session::textMessage);
+
+        if (!report.isEmpty()) {
+            try {
+                return Mono.just(objectMapper.writeValueAsString(
+                        new RequestSendingReport(report))
+                ).map(session::textMessage);
+            } catch (JsonProcessingException e) {
+                log.warn("WSHandler [{}]: parsing to JSON failed: {}",
+                        session.getId(), e.toString());
+            }
+        }
+        return Mono.empty(); 
     }
 }
