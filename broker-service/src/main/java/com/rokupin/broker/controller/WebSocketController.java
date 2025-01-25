@@ -4,11 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.BrokerEvent;
-import com.rokupin.broker.model.RequestSendingReport;
+import com.rokupin.broker.model.CommunicationReport;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.broker.service.TradingService;
-import com.rokupin.model.fix.*;
+import com.rokupin.model.fix.ClientTradingRequest;
+import com.rokupin.model.fix.ClientTradingResponse;
+import com.rokupin.model.fix.FixMessageMisconfiguredException;
+import com.rokupin.model.fix.FixResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
@@ -83,7 +87,6 @@ public class WebSocketController implements WebSocketHandler {
                 );
     }
 
-    //  todo refactor
     private Consumer<SignalType> handleSessionShutdown(WebSocketSession session) {
         return signalType -> {
             log.info("WSHandler [{}]: cleanup triggered with signal: {}",
@@ -102,32 +105,28 @@ public class WebSocketController implements WebSocketHandler {
     }
 
     private Mono<WebSocketMessage> handleNewClient(WebSocketSession session) {
-        return tradingService.getState()
-                .doOnNext(state -> log.debug(
-                        "WSHandler [{}]: received state '{}' via getState",
-                        session.getId(), state)
-                ).map(session::textMessage);
+        return Mono.just(session.textMessage(tradingService.getState()));
     }
 
     private Flux<WebSocketMessage> handleTradeResponseEvent(WebSocketSession session) {
         return tradeResponseEventFlux
                 .map(EventObject::getSource)
-                .flatMap(msg -> {
-                    if (msg instanceof FixResponse fixResponse) {
-                        if (fixResponse.getTargetSubId().equals(session.getId())) {
-                            log.debug("WSHandler [{}]: processing trading " +
-                                    "response event '{}'", session.getId(), msg);
-                            return fixToClientResponse(session, fixResponse);
-                        } else {
-                            return Flux.empty();
-                        }
-                    } else {
-                        return Flux.empty();
-                    }
-                });
+                .flatMap(msg -> onTradeResponse(msg, session));
     }
 
-    private Mono<WebSocketMessage> fixToClientResponse(WebSocketSession session,
+    private Publisher<WebSocketMessage> onTradeResponse(Object event,
+                                                        WebSocketSession session) {
+        if (event instanceof FixResponse fixResponse) {
+            if (fixResponse.getTargetSubId().equals(session.getId())) {
+                log.debug("WSHandler [{}]: processing trading " +
+                        "response event '{}'", session.getId(), event);
+                return fixToClientResponse(session, fixResponse);
+            }
+        }
+        return Mono.empty();
+    }
+
+    private Publisher<WebSocketMessage> fixToClientResponse(WebSocketSession session,
                                                        FixResponse fixResponse) {
         try {
             ClientTradingResponse response = new ClientTradingResponse(fixResponse);
@@ -202,7 +201,7 @@ public class WebSocketController implements WebSocketHandler {
         if (!report.isEmpty()) {
             try {
                 return Mono.just(objectMapper.writeValueAsString(
-                        new RequestSendingReport(report))
+                        new CommunicationReport(report))
                 ).map(session::textMessage);
             } catch (JsonProcessingException e) {
                 log.warn("WSHandler [{}]: parsing to JSON failed: {}",

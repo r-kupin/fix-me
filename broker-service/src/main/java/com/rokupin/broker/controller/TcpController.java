@@ -32,12 +32,12 @@ public class TcpController {
     private final String host;
     private final int port;
     private final AtomicBoolean connectionInProgress;
-    private Sinks.Many<String> initialStateSink;
-
-    private Connection connection;
-    private FixMessageProcessor routerInputProcessor;
     private final TradingService tradingService;
     private final Flux<BrokerEvent<FixMessage>> tradeRequestEventFlux;
+    private final Sinks.Many<String> toRouterSink;
+    private Connection connection;
+    private FixMessageProcessor routerInputProcessor;
+
 
     public TcpController(TradingService tradingService,
                          @Qualifier("tradeRequestEventPublisher") Consumer<FluxSink<BrokerEvent<FixMessage>>> tradeRequestEventPublisher,
@@ -48,11 +48,19 @@ public class TcpController {
         this.tradingService = tradingService;
         this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
         this.connectionInProgress = new AtomicBoolean(false);
-        this.initialStateSink = Sinks.many().replay().all();
-        this.routerInputProcessor = new FixMessageProcessor();
+        this.toRouterSink = Sinks.many().unicast().onBackpressureBuffer();
     }
 
     @PostConstruct
+    private void init() {
+        tradeRequestEventFlux.map(EventObject::getSource)
+                .flatMap(this::requestEventToStringPublisher)
+                .doOnNext(toRouterSink::tryEmitNext)
+                .subscribe();
+
+        initiateRouterConnection();
+    }
+
     public void initiateRouterConnection() {
         if (Objects.isNull(connection) &&
                 connectionInProgress.compareAndSet(false, true)) {
@@ -76,8 +84,6 @@ public class TcpController {
                     connectionInProgress.set(false);
                     log.info("TCPService: Connected successfully to {}:{}", host, port);
                 }).onErrorResume(e -> {
-                    initialStateSink.tryEmitNext(
-                            "Router service is unavailable. Try to reconnect later.");
                     log.error("TCPService: Connection attempts exhausted. Reporting failure.");
                     connectionInProgress.set(false);
                     return Mono.empty();
@@ -107,11 +113,8 @@ public class TcpController {
 
     private Publisher<Void> handle(NettyInbound inbound, NettyOutbound outbound) {
         return outbound.sendString(
-                tradeRequestEventFlux.map(EventObject::getSource)
-                        .flatMap(this::requestEventToStringPublisher),
-                StandardCharsets.UTF_8
+                toRouterSink.asFlux(), StandardCharsets.UTF_8
         ).then().doOnError(e -> {
-            // todo need to inform sender somehow
             log.warn("TCPService: Failed to send message, retrying connection: {}",
                     e.getMessage());
             connection = null; // Reset connection and retry
@@ -119,7 +122,6 @@ public class TcpController {
         });
     }
 
-    // todo might reconnect endlessly
     private Publisher<String> requestEventToStringPublisher(Object event) {
         if (event instanceof FixRequest request) {
             if (Objects.nonNull(connection)) {
@@ -127,8 +129,16 @@ public class TcpController {
             }
             initiateRouterConnection();
             if (Objects.isNull(connection)) {
-                return Mono.just("Trading request not sent: " +
-                        "Router service is unavailable.");
+                log.info("Trading request not sent: Router service is unavailable.");
+                try {
+                    FixResponse autogen = autoGenerateResponseOnFail(
+                            request, FixResponse.SEND_FAILED
+                    );
+                    tradingService.handleMessageFromRouter(autogen.asFix());
+                } catch (FixMessageMisconfiguredException e) {
+                    log.error("Response autogeneration failed");
+                }
+                return Mono.empty();
             } else {
                 return publishRequestString(request);
             }
@@ -138,8 +148,8 @@ public class TcpController {
             }
             initiateRouterConnection();
             if (Objects.isNull(connection)) {
-                return Mono.just("Trading request not sent: " +
-                        "Router service is unavailable.");
+                log.info("State update request not sent: Router service is unavailable.");
+                return Mono.empty();
             } else {
                 return publishStateRequestString(stateRequest);
             }
@@ -162,15 +172,8 @@ public class TcpController {
     private Publisher<String> publishRequestString(FixRequest request) {
         try {
             if (tradingService.getAssignedId().isEmpty()) {
-                FixResponse autogen = new FixResponse(
-                        request.getTarget(),
-                        request.getSender(),
-                        request.getSenderSubId(),
-                        request.getInstrument(),
-                        request.getAction(),
-                        request.getAmount(),
-                        FixResponse.MSG_ORD_REJECTED,
-                        FixResponse.SEND_FAILED
+                FixResponse autogen = autoGenerateResponseOnFail(
+                        request, FixResponse.SEND_FAILED
                 );
                 log.info("TCPService: had to handle request while no id assigned");
                 tradingService.handleMessageFromRouter(autogen.asFix());
@@ -184,6 +187,19 @@ public class TcpController {
             log.info("Trading request not sent: '{}'", e.getMessage());
         }
         return Mono.empty();
+    }
+
+    private FixResponse autoGenerateResponseOnFail(FixRequest request, int reason) throws FixMessageMisconfiguredException {
+        return new FixResponse(
+                request.getTarget(),
+                request.getSender(),
+                request.getSenderSubId(),
+                request.getInstrument(),
+                request.getAction(),
+                request.getAmount(),
+                FixResponse.MSG_ORD_REJECTED,
+                reason
+        );
     }
 
     private Retry retrySpec() {

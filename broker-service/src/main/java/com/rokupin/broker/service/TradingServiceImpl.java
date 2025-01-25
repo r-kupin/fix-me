@@ -11,8 +11,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,11 +25,9 @@ public class TradingServiceImpl implements TradingService {
 
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher publisher;
-    private final AtomicBoolean connectionInProgress;
     private final AtomicBoolean updateRequested;
     // StockId : {Instrument : AmountAvailable}
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> currentStockState;
-    private Sinks.Many<String> initialStateSink;
     private String routerId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
@@ -40,7 +36,6 @@ public class TradingServiceImpl implements TradingService {
         this.objectMapper = objectMapper;
         this.currentStockState = new ConcurrentHashMap<>();
         this.updateRequested = new AtomicBoolean(false);
-        this.connectionInProgress = new AtomicBoolean(false);
     }
 
 // -------------------------- Events from Router processing
@@ -52,7 +47,9 @@ public class TradingServiceImpl implements TradingService {
         try { // received initial state update
             FixIdAssignationStockState initialMessage =
                     FixMessage.fromFix(message, new FixIdAssignationStockState());
-            updateStateInitial(initialMessage);
+            assignedId = initialMessage.getTarget();
+            routerId = initialMessage.getSender();
+            updateState(initialMessage.getStockJson());
         } catch (FixMessageMisconfiguredException e) {
             try { // received trading response
                 FixResponse response =
@@ -62,7 +59,7 @@ public class TradingServiceImpl implements TradingService {
                 try { // received follow-up update
                     FixStockStateReport followUp =
                             FixMessage.fromFix(message, new FixStockStateReport());
-                    updateStateFollowing(followUp);
+                    updateState(followUp.getStockJson());
                 } catch (FixMessageMisconfiguredException exc) {
                     log.warn("TCP client received invalid message");
                 }
@@ -70,45 +67,25 @@ public class TradingServiceImpl implements TradingService {
         }
     }
 
-    private void updateStateInitial(FixIdAssignationStockState initialMessage) {
-        try {
-            ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> stocksStateMessages =
-                    objectMapper.readValue(initialMessage.getStockJson(), new TypeReference<>() {});
-            currentStockState.clear();
-            stocksStateMessages.forEach(this::updateState);
-            assignedId = initialMessage.getTarget();
-            routerId = initialMessage.getSender();
-
-            initialStateSink = Sinks.many().replay().all();
-            initialStateSink.tryEmitNext(serializeCurrentState());
-
-            log.debug("TCPService: stock state updated from initial update. " +
-                    "Emitting update to the flux.");
-            updateRequested.set(false);
-        } catch (JsonProcessingException e) {
-            log.warn("TCPService: received initial stock state JSON parsing failed");
-        }
-    }
-
-    private void updateState(String stockId, ConcurrentHashMap<String, Integer> stockState) {
-        if (currentStockState.containsKey(stockId)) {
-            currentStockState.replace(stockId, stockState);
-        } else {
-            currentStockState.put(stockId, new ConcurrentHashMap<>(stockState));
-        }
-    }
-
-    private void updateStateFollowing(FixStockStateReport stateReport) {
+    private void updateState(String stock) {
         try {
             ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> state =
-                    objectMapper.readValue(stateReport.getStockJson(),
-                            new TypeReference<>() {}
-                    );
+                    objectMapper.readValue(stock, new TypeReference<>() {
+                    });
             currentStockState.clear();
-            state.forEach(this::updateState);
+
+            state.forEach((stockId, stockState) -> {
+                if (currentStockState.containsKey(stockId)) {
+                    currentStockState.replace(stockId, stockState);
+                } else {
+                    currentStockState.put(stockId,
+                            new ConcurrentHashMap<>(stockState));
+                }
+            });
+
             publishCurrentStockState();
         } catch (JsonProcessingException e) {
-            log.warn("TCPService: received follow-up stock state JSON parsing failed");
+            log.warn("TCPService: received stock state JSON parsing failed");
         }
     }
 
@@ -140,22 +117,15 @@ public class TradingServiceImpl implements TradingService {
     }
 
     @Override
-    public Mono<String> getState() {
-        // If cache is not empty, return the cached state immediately
-        if (!currentStockState.isEmpty()) {
-            return Mono.just(serializeCurrentState());
-        } else {
-            // Stock state cache is empty
-            if (updateRequested.compareAndSet(false, true)) {
-                publisher.publishEvent(new BrokerEvent<>(
-                        new FixStateUpdateRequest(assignedId, routerId))
-                );
-            } else if (!connectionInProgress.get()) {
-                initialStateSink = Sinks.many().replay().all();
-            }
+    public String getState() {
+        if (currentStockState.isEmpty() &&
+                updateRequested.compareAndSet(false, true)) {
+            // ask for update
+            publisher.publishEvent(
+                    new BrokerEvent<>(
+                            new FixStateUpdateRequest(assignedId, routerId)));
         }
-        // Listen to the flux, states will be published upon router's answer
-        return initialStateSink.asFlux().next();
+        return serializeCurrentState();
     }
 
     // -------------------------- Util

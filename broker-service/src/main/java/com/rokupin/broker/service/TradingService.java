@@ -1,7 +1,6 @@
 package com.rokupin.broker.service;
 
 import com.rokupin.model.fix.ClientTradingRequest;
-import reactor.core.publisher.Mono;
 
 public interface TradingService {
     void            handleMessageFromRouter(String message);
@@ -10,5 +9,6 @@ public interface TradingService {
 
     String          getAssignedId();
     void            setAssignedId(String id);
-    Mono<String>    getState();
+
+    String getState();
 }
