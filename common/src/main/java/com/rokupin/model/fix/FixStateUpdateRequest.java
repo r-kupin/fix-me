@@ -1,12 +1,10 @@
 package com.rokupin.model.fix;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @Data
 public class FixStateUpdateRequest extends FixMessage {
@@ -43,5 +41,23 @@ public class FixStateUpdateRequest extends FixMessage {
             throw new FixMessageMisconfiguredException(
                     "'message type' [MsgType (35)] for this type of message is " +
                             "expected to be 'U4'. Provided: '" + msgType + "'");
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof FixStateUpdateRequest that)) return false;
+
+        return msgType.equals(that.msgType) &&
+                sender.equals(that.sender) &&
+                target.equals(that.target);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = msgType.hashCode();
+        result = 31 * result + sender.hashCode();
+        result = 31 * result + target.hashCode();
+        return result;
     }
 }

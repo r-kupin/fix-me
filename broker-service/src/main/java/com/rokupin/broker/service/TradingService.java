@@ -8,5 +8,7 @@ public interface TradingService {
                                             String clientId);
     String          getAssignedId();
 
+    void setAssignedId(String id);
+
     String getState();
 }

@@ -102,4 +102,30 @@ public class FixRequest extends FixMessage {
                     "'message type' [MsgType (35)] for this type of message is " +
                             "expected to be 'D'. Provided: '" + msgType + "'");
     }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof FixRequest request)) return false;
+
+        return action == request.action &&
+                amount == request.amount &&
+                msgType.equals(request.msgType) &&
+                Objects.equals(sender, request.sender) &&
+                Objects.equals(senderSubId, request.senderSubId) &&
+                Objects.equals(target, request.target) &&
+                instrument.equals(request.instrument);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = msgType.hashCode();
+        result = 31 * result + Objects.hashCode(sender);
+        result = 31 * result + Objects.hashCode(senderSubId);
+        result = 31 * result + Objects.hashCode(target);
+        result = 31 * result + instrument.hashCode();
+        result = 31 * result + action;
+        result = 31 * result + amount;
+        return result;
+    }
 }

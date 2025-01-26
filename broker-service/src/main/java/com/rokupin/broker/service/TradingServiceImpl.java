@@ -7,24 +7,29 @@ import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
 public class TradingServiceImpl implements TradingService {
     @Getter
+    @Setter
     private String assignedId;
+    @Getter
+    @Setter
+    private String routerId;
 
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher publisher;
     // StockId : {Instrument : AmountAvailable}
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> currentStockState;
-    private String routerId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
                               ObjectMapper objectMapper) {
@@ -113,9 +118,11 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     public String getState() {
-        if (currentStockState.isEmpty()) {
-            publisher.publishEvent(new BrokerEvent<>(
-                    new FixStateUpdateRequest(assignedId, routerId)));
+        if (currentStockState.isEmpty() && Objects.nonNull(routerId)) {
+            BrokerEvent<FixStateUpdateRequest> event =
+                    new BrokerEvent<>(
+                            new FixStateUpdateRequest(assignedId, routerId));
+            publisher.publishEvent(event);
         }
         return serializeCurrentState();
     }
