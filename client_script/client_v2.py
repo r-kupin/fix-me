@@ -7,7 +7,7 @@ import websockets
 
 # Configuration
 HOST = "localhost"  # Replace with your host
-PORT = 8080  # Replace with your port
+PORT = 8084  # Replace with your port
 
 
 # Helper function to create random trading requests
@@ -80,12 +80,9 @@ async def sync_trade_simulator(uri_):
                 response = await websocket.recv()
                 print("Received response:")
                 print(response)
-                if response.startswith("Trading request not sent:"):
+                if response.startswith("{\"reason\":"):
                     print("Request was rejected.")
                     break
-                elif response == "Trading request sent":
-                    print("Request accepted, waiting for trading response...")
-                    continue
 
                 # Handle trading response or updated stock state
                 try:

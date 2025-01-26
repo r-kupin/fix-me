@@ -13,15 +13,8 @@ import java.util.Objects;
 public class FixResponse extends FixMessage {
     public static final int MSG_ORD_FILLED = 2;
     public static final int MSG_ORD_REJECTED = 8;
-    private static final int TAG_EXEC_ID = 17;
-    private static final int TAG_LAST_PX = 31;
-    private static final int TAG_LAST_SHARES = 32;
-    private static final int TAG_ORDER_ID = 37;
-    private static final int TAG_EXEC_TYPE = 150;
-
     public static final String MSG_EXECUTION_REPORT = "8";
     public static final int TAG_ORD_STATUS = 39;
-
     public static final int UNSPECIFIED = 0;
     public static final int UNSUPPORTED_FORMAT = 1;
     public static final int EXCHANGE_IS_NOT_AVAILABLE = 2;
@@ -30,7 +23,11 @@ public class FixResponse extends FixMessage {
     public static final int ACTION_UNSUPPORTED = 5;
     public static final int TOO_MUCH = 6;
     public static final int SEND_FAILED = 7;
-
+    private static final int TAG_EXEC_ID = 17;
+    private static final int TAG_LAST_PX = 31;
+    private static final int TAG_LAST_SHARES = 32;
+    private static final int TAG_ORDER_ID = 37;
+    private static final int TAG_EXEC_TYPE = 150;
     private String msgType;         // MsgType (35)
     private String sender;          // SenderCompID (49)
     private String target;          // TargetCompID (56)    >> assigned ID
@@ -66,6 +63,20 @@ public class FixResponse extends FixMessage {
         } else {
             throw new FixMessageMisconfiguredException("No fields can be null.");
         }
+    }
+
+    public static FixResponse autoGenerateResponseOnFail(FixRequest request,
+                                                         int reason) throws FixMessageMisconfiguredException {
+        return new FixResponse(
+                request.getTarget(),
+                request.getSender(),
+                request.getSenderSubId(),
+                request.getInstrument(),
+                request.getAction(),
+                request.getAmount(),
+                FixResponse.MSG_ORD_REJECTED,
+                reason
+        );
     }
 
     @Override
@@ -128,10 +139,13 @@ public class FixResponse extends FixMessage {
         return switch (rejectionReason) {
             case UNSUPPORTED_FORMAT -> "Unsupported format";
             case EXCHANGE_IS_NOT_AVAILABLE -> "Target exchange is unavailable";
-            case INSTRUMENT_NOT_SUPPORTED -> "Target exchange doesn't operate with requested instrument";
-            case EXCHANGE_LACKS_REQUESTED_AMOUNT -> "Target exchange doesn't possess requested quantity";
+            case INSTRUMENT_NOT_SUPPORTED ->
+                    "Target exchange doesn't operate with requested instrument";
+            case EXCHANGE_LACKS_REQUESTED_AMOUNT ->
+                    "Target exchange doesn't possess requested quantity";
             case ACTION_UNSUPPORTED -> "Action (side) should be either 1 or 2";
-            case TOO_MUCH -> "Target exchange limits it's amount of the instrument being sold.";
+            case TOO_MUCH ->
+                    "Target exchange limits it's amount of the instrument being sold.";
             case SEND_FAILED -> "Target service can't be reached";
             default -> "Reason unknown";
         };

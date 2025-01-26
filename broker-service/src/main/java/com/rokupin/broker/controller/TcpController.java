@@ -77,14 +77,14 @@ public class TcpController {
                 .connect()
                 .retryWhen(retrySpec())
                 .doOnError(e -> {
-                    log.warn("TCPService: Connection failed: {}", e.getMessage());
+                    log.warn("TCPHandler: Connection failed: {}", e.getMessage());
                     connection = null;
                 }).doOnSuccess(connection -> {
-                    this.connection = connection;
                     connectionInProgress.set(false);
-                    log.info("TCPService: Connected successfully to {}:{}", host, port);
+                    this.connection = connection;
+                    log.info("TCPHandler: Connected successfully to {}:{}", host, port);
                 }).onErrorResume(e -> {
-                    log.error("TCPService: Connection attempts exhausted. Reporting failure.");
+                    log.error("TCPHandler: Connection attempts exhausted. Reporting failure.");
                     connectionInProgress.set(false);
                     return Mono.empty();
                 }).subscribe();
@@ -92,7 +92,7 @@ public class TcpController {
 
     private void onConnected(Connection connection) {
         if (routerInputProcessor != null) {
-            log.info("TCPService: Cleaning up existing processor before re-initialization.");
+            log.info("TCPHandler: Cleaning up existing processor before re-initialization.");
             routerInputProcessor.complete();
         }
 
@@ -103,19 +103,19 @@ public class TcpController {
                 .asString()
                 .doOnNext(routerInputProcessor::processInput)
                 .subscribe();
-        log.info("TCPService: All client input is redirected into processor.");
+        log.info("TCPHandler: All client input is redirected into processor.");
 
         routerInputProcessor.getFlux()
                 .doOnNext(tradingService::handleMessageFromRouter)
                 .subscribe();
-        log.info("TCPService: Processor initialized and subscription established.");
+        log.info("TCPHandler: Processor initialized and subscription established.");
     }
 
     private Publisher<Void> handle(NettyInbound inbound, NettyOutbound outbound) {
         return outbound.sendString(
                 toRouterSink.asFlux(), StandardCharsets.UTF_8
         ).then().doOnError(e -> {
-            log.warn("TCPService: Failed to send message, retrying connection: {}",
+            log.warn("TCPHandler: Failed to send message, retrying connection: {}",
                     e.getMessage());
             connection = null; // Reset connection and retry
             initiateRouterConnection();
@@ -126,42 +126,35 @@ public class TcpController {
         if (event instanceof FixRequest request) {
             if (Objects.nonNull(connection)) {
                 return publishRequestString(request);
-            }
-            initiateRouterConnection();
-            if (Objects.isNull(connection)) {
-                log.info("Trading request not sent: Router service is unavailable.");
+            } else if (!connectionInProgress.get()) {
+                log.info("TCPHandler: trading request not sent: Router service is unavailable.");
                 try {
-                    FixResponse autogen = autoGenerateResponseOnFail(
+                    FixResponse autogen = FixResponse.autoGenerateResponseOnFail(
                             request, FixResponse.SEND_FAILED
                     );
                     tradingService.handleMessageFromRouter(autogen.asFix());
                 } catch (FixMessageMisconfiguredException e) {
-                    log.error("Response autogeneration failed");
+                    log.error("TCPHandler: Response autogeneration failed");
                 }
-                return Mono.empty();
-            } else {
-                return publishRequestString(request);
+                initiateRouterConnection();
             }
         } else if (event instanceof FixStateUpdateRequest stateRequest) {
             if (Objects.nonNull(connection)) {
                 return publishStateRequestString(stateRequest);
+            } else if (!connectionInProgress.get()) {
+                log.info("TCPHandler: State update request not sent: Router service is unavailable.");
+                initiateRouterConnection();
             }
-            initiateRouterConnection();
-            if (Objects.isNull(connection)) {
-                log.info("State update request not sent: Router service is unavailable.");
-                return Mono.empty();
-            } else {
-                return publishStateRequestString(stateRequest);
-            }
+        } else {
+            log.info("TCPHandler: reported event is not FixRequest");
         }
-        log.info("TCPService: reported event is not FixRequest");
         return Mono.empty();
     }
 
     private Publisher<String> publishStateRequestString(FixStateUpdateRequest request) {
         try {
             String fix = request.asFix();
-            log.info("TCPService: sending message '{}'", fix);
+            log.info("TCPHandler: sending message '{}'", fix);
             return Mono.just(fix);
         } catch (FixMessageMisconfiguredException e) {
             log.info("Trading request not sent: '{}'", e.getMessage());
@@ -171,44 +164,23 @@ public class TcpController {
 
     private Publisher<String> publishRequestString(FixRequest request) {
         try {
-            if (tradingService.getAssignedId().isEmpty()) {
-                FixResponse autogen = autoGenerateResponseOnFail(
-                        request, FixResponse.SEND_FAILED
-                );
-                log.info("TCPService: had to handle request while no id assigned");
-                tradingService.handleMessageFromRouter(autogen.asFix());
-            } else {
-                request.setSender(tradingService.getAssignedId());
-                String fix = request.asFix();
-                log.info("TCPService: sending message '{}'", fix);
-                return Mono.just(fix);
-            }
+            request.setSender(tradingService.getAssignedId());
+            String fix = request.asFix();
+            log.info("TCPHandler: sending message '{}'", fix);
+            return Mono.just(fix);
         } catch (FixMessageMisconfiguredException e) {
-            log.info("Trading request not sent: '{}'", e.getMessage());
+            log.info("TCPHandler: Trading request not sent: '{}'", e.getMessage());
         }
         return Mono.empty();
-    }
-
-    private FixResponse autoGenerateResponseOnFail(FixRequest request, int reason) throws FixMessageMisconfiguredException {
-        return new FixResponse(
-                request.getTarget(),
-                request.getSender(),
-                request.getSenderSubId(),
-                request.getInstrument(),
-                request.getAction(),
-                request.getAmount(),
-                FixResponse.MSG_ORD_REJECTED,
-                reason
-        );
     }
 
     private Retry retrySpec() {
         return Retry.backoff(5, Duration.ofSeconds(2))
                 .maxBackoff(Duration.ofSeconds(10))
                 .doBeforeRetry(signal -> log.info(
-                        "TCPService: retrying connection, attempt {}",
+                        "TCPHandler: retrying connection, attempt {}",
                         signal.totalRetriesInARow() + 1)
                 ).onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
-                        new RuntimeException("TCPService: Max retry attempts reached."));
+                        new RuntimeException("TCPHandler: Max retry attempts reached."));
     }
 }

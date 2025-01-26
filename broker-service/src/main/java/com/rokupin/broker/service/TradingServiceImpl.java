@@ -7,42 +7,38 @@ import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.model.fix.*;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
 public class TradingServiceImpl implements TradingService {
     @Getter
-    @Setter
     private String assignedId;
 
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher publisher;
-    private final AtomicBoolean updateRequested;
     // StockId : {Instrument : AmountAvailable}
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> currentStockState;
     private String routerId;
 
     public TradingServiceImpl(ApplicationEventPublisher publisher,
                               ObjectMapper objectMapper) {
+        this.assignedId = "not assigned";
         this.publisher = publisher;
         this.objectMapper = objectMapper;
         this.currentStockState = new ConcurrentHashMap<>();
-        this.updateRequested = new AtomicBoolean(false);
     }
 
 // -------------------------- Events from Router processing
 
     @Override
     public void handleMessageFromRouter(String message) {
-        log.debug("TCPService: processing message: '{}'", message);
+        log.debug("Trading service: processing message: '{}'", message);
 
         try { // received initial state update
             FixIdAssignationStockState initialMessage =
@@ -61,7 +57,7 @@ public class TradingServiceImpl implements TradingService {
                             FixMessage.fromFix(message, new FixStockStateReport());
                     updateState(followUp.getStockJson());
                 } catch (FixMessageMisconfiguredException exc) {
-                    log.warn("TCP client received invalid message");
+                    log.warn("Trading service: received invalid message");
                 }
             }
         }
@@ -85,7 +81,7 @@ public class TradingServiceImpl implements TradingService {
 
             publishCurrentStockState();
         } catch (JsonProcessingException e) {
-            log.warn("TCPService: received stock state JSON parsing failed");
+            log.warn("Trading service: received stock state JSON parsing failed");
         }
     }
 
@@ -98,13 +94,12 @@ public class TradingServiceImpl implements TradingService {
         publisher.publishEvent(new BrokerEvent<>(response));
     }
 
-// -------------------------- To be triggered by WS Handler
-
     @Override
     public String handleMessageFromClient(ClientTradingRequest clientMsg,
                                           String clientId) {
         try {
             FixRequest request = new FixRequest(clientMsg);
+            request.setSender(assignedId);
             request.setSenderSubId(clientId);
             publisher.publishEvent(new BrokerEvent<>(request));
             return "";
@@ -118,32 +113,26 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     public String getState() {
-        if (currentStockState.isEmpty() &&
-                updateRequested.compareAndSet(false, true)) {
-            // ask for update
-            publisher.publishEvent(
-                    new BrokerEvent<>(
-                            new FixStateUpdateRequest(assignedId, routerId)));
+        if (currentStockState.isEmpty()) {
+            publisher.publishEvent(new BrokerEvent<>(
+                    new FixStateUpdateRequest(assignedId, routerId)));
         }
         return serializeCurrentState();
     }
 
-    // -------------------------- Util
     private void publishCurrentStockState() {
         publisher.publishEvent(new BrokerEvent<>(
                 new StocksStateMessage(
                         Map.copyOf(currentStockState))));
-        log.debug("TCPService: published stock update event");
-        updateRequested.set(false);
+        log.debug("Trading service: published stock update event");
     }
 
     private String serializeCurrentState() {
         try {
-            return objectMapper.writeValueAsString(
-                    new StocksStateMessage(
-                            Map.copyOf(currentStockState)));
+            return objectMapper.writeValueAsString(new StocksStateMessage(
+                    Map.copyOf(currentStockState)));
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize currentStockState");
+            throw new IllegalStateException("Trading service: failed to serialize currentStockState");
         }
     }
 }
