@@ -1,10 +1,7 @@
-package com.rokupin.broker.controller;
+package com.rokupin.broker;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.HandlerMapping;
-import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter;
@@ -12,13 +9,12 @@ import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAd
 import java.util.HashMap;
 import java.util.Map;
 
-@Configuration
-@EnableWebFlux
+//@Configuration
 @Slf4j
 public class ControllerConfig {
 
-    private final WebSocketController   webSocketController;
-    private final TcpController         tcpController;
+    private final WebSocketController webSocketController;
+    private final TcpController tcpController;
 
     public ControllerConfig(WebSocketController webSocketController,
                             TcpController tcpController) {
@@ -26,12 +22,12 @@ public class ControllerConfig {
         this.tcpController = tcpController;
     }
 
-    @Bean
+    //    @Bean
     WebSocketHandlerAdapter webSocketHandlerAdapter() {
         return new WebSocketHandlerAdapter();
     }
 
-    @Bean
+    //    @Bean
     HandlerMapping handlerMapping() {
         Map<String, WebSocketHandler> handlers = new HashMap<>();
         handlers.put("/ws/requests", webSocketController);

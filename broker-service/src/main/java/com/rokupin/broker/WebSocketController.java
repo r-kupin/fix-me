@@ -1,4 +1,4 @@
-package com.rokupin.broker.controller;
+package com.rokupin.broker;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -13,7 +13,6 @@ import com.rokupin.model.fix.FixMessageMisconfiguredException;
 import com.rokupin.model.fix.FixResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
-import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -26,9 +25,8 @@ import java.util.EventObject;
 import java.util.function.Consumer;
 
 @Slf4j
-@Component
+//@Component
 public class WebSocketController implements WebSocketHandler {
-
     private final TradingService tradingService;
     private final ObjectMapper objectMapper;
     private final Flux<BrokerEvent<StocksStateMessage>> stockStateUpdateEventFlux;
@@ -38,6 +36,7 @@ public class WebSocketController implements WebSocketHandler {
                                ObjectMapper objectMapper,
                                Consumer<FluxSink<BrokerEvent<StocksStateMessage>>> stockStateUpdateEventPublisher,
                                Consumer<FluxSink<BrokerEvent<FixResponse>>> tradeResponseEventPublisher) {
+        log.debug("New ws handler");
         this.tradingService = tradingService;
         this.objectMapper = objectMapper;
         this.stockStateUpdateEventFlux = Flux.create(stockStateUpdateEventPublisher).share();

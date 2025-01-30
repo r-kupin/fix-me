@@ -39,8 +39,6 @@ public class TradingServiceImpl implements TradingService {
         this.currentStockState = new ConcurrentHashMap<>();
     }
 
-// -------------------------- Events from Router processing
-
     @Override
     public void handleMessageFromRouter(String message) {
         log.debug("Trading service: processing message: '{}'", message);

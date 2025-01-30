@@ -1,4 +1,4 @@
-package com.rokupin.broker.controller;
+package com.rokupin.broker;
 
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.service.TradingService;
@@ -61,7 +61,7 @@ public class TcpController {
         initiateRouterConnection();
     }
 
-    public void initiateRouterConnection() {
+    private void initiateRouterConnection() {
         if (Objects.isNull(connection) &&
                 connectionInProgress.compareAndSet(false, true)) {
             connect();
