@@ -3,6 +3,7 @@ package com.rokupin.broker.websocket.service;
 import com.rokupin.broker.websocket.publishers.WebSocketSessionEventHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -19,19 +20,10 @@ public class WebSocketHandlerServiceImpl implements WebSocketHandlerService {
     public Mono<Void> handleSession(WebSocketSession session) {
         log.debug("WSHandler [{}]: service started session handling", session.getId());
 
-//                Sinks.Many<String> sinks = Sinks.many()
-//                .multicast()
-//                .onBackpressureBuffer();
-//
-//        handlers.forEach(handler ->
-//                Flux.from(handler.handle(session))
-//                        .subscribe(sinks::tryEmitNext)
-//        );
-
         return session.send(
-                handlers.get(0).handle(session).mergeWith(
-                                handlers.get(1).handle(session)).mergeWith(
-                                handlers.get(2).handle(session))
-                        .map(session::textMessage));
+                Flux.fromIterable(handlers)
+                        .flatMap(handler -> handler.handle(session))
+                        .map(session::textMessage)
+        );
     }
 }

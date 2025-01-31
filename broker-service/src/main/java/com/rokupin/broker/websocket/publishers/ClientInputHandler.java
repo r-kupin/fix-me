@@ -7,6 +7,7 @@ import com.rokupin.broker.model.CommunicationReport;
 import com.rokupin.broker.service.TradingService;
 import com.rokupin.model.fix.ClientTradingRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
@@ -24,7 +25,7 @@ public class ClientInputHandler implements WebSocketSessionEventHandler {
     }
 
     @Override
-    public Flux<String> handle(WebSocketSession session) {
+    public Publisher<String> handle(WebSocketSession session) {
         log.debug("WSHandler [{}]: client input handler is ready", session.getId());
 
         return Flux.just(service.getState())
@@ -33,11 +34,11 @@ public class ClientInputHandler implements WebSocketSessionEventHandler {
                         .flatMap(msg -> clientInputHandler(msg, session)));
     }
 
-    private Mono<String> clientInputHandler(String msg,
+    private Publisher<String> clientInputHandler(String msg,
                                             WebSocketSession session) {
         String report;
 
-        log.info("WSHandler [{}]: processing request '{}'", session.getId(), msg);
+        log.debug("WSHandler [{}]: processing request '{}'", session.getId(), msg);
 
         try {
             ClientTradingRequest clientMsg = objectMapper.readValue(msg,

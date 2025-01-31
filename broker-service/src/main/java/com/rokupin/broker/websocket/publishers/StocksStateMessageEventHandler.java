@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.model.StocksStateMessage;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -28,16 +29,16 @@ public class StocksStateMessageEventHandler implements WebSocketSessionEventHand
     }
 
     @Override
-    public Flux<String> handle(WebSocketSession session) {
+    public Publisher<String> handle(WebSocketSession session) {
         log.debug("WSHandler [{}]: stock state handler is ready", session.getId());
         return inputFlux.flatMap(event -> handleEmission(event, session));
     }
 
-    private Mono<String> handleEmission(Object event, WebSocketSession session) {
+    private Publisher<String> handleEmission(Object event, WebSocketSession session) {
         if (event instanceof StocksStateMessage stocksStateMessage) {
             try {
                 String stocksStateJson = objectMapper.writeValueAsString(stocksStateMessage);
-                log.info("WSHandler [{}]: broadcasting a stock " +
+                log.debug("WSHandler [{}]: broadcasting a stock " +
                         "state update: '{}'", session.getId(), stocksStateJson);
                 return Mono.just(stocksStateJson);
             } catch (JsonProcessingException e) {

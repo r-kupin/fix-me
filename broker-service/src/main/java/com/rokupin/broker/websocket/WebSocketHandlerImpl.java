@@ -20,7 +20,7 @@ public class WebSocketHandlerImpl implements WebSocketHandler {
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
-        log.debug("WSHandler [{}]: handle session in handler", session.getId());
+        log.debug("WSHandler [{}]: handling session in handler", session.getId());
         return service.handleSession(session)
                 .doOnError(e -> log.error(
                         "WSHandler [{}]: encountered error: {}",

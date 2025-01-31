@@ -46,7 +46,7 @@ public class TcpController {
         this.tradingService = tradingService;
         this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
         this.connectionInProgress = new AtomicBoolean(false);
-        this.toRouterSink = Sinks.many().multicast().onBackpressureBuffer();
+        this.toRouterSink = Sinks.many().multicast().directAllOrNothing();
     }
 
     @PostConstruct
