@@ -116,12 +116,16 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     public String getState() {
+        BrokerEvent<FixStateUpdateRequest> event = null;
         if (currentStockState.isEmpty() && Objects.nonNull(routerId)) {
-            BrokerEvent<FixStateUpdateRequest> event =
-                    new BrokerEvent<>(
-                            new FixStateUpdateRequest(assignedId, routerId));
-            publisher.publishEvent(event);
+            event = new BrokerEvent<>(
+                    new FixStateUpdateRequest(assignedId, routerId));
+        } else if (Objects.isNull(routerId)) {
+            event = new BrokerEvent<>(
+                    new FixStateUpdateRequest(assignedId, "not assigned"));
         }
+        if (Objects.nonNull(event))
+            publisher.publishEvent(event);
         return serializeCurrentState();
     }
 

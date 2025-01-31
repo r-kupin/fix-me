@@ -14,8 +14,6 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.Connection;
-import reactor.netty.NettyInbound;
-import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpClient;
 import reactor.util.retry.Retry;
 
@@ -48,7 +46,7 @@ public class TcpController {
         this.tradingService = tradingService;
         this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
         this.connectionInProgress = new AtomicBoolean(false);
-        this.toRouterSink = Sinks.many().unicast().onBackpressureBuffer();
+        this.toRouterSink = Sinks.many().multicast().onBackpressureBuffer();
     }
 
     @PostConstruct
@@ -57,6 +55,11 @@ public class TcpController {
                 .flatMap(this::requestEventToStringPublisher)
                 .doOnNext(toRouterSink::tryEmitNext)
                 .subscribe();
+
+//        toRouterSink.asFlux()
+//                .flatMap(this::sendMessage)
+//                .doOnNext(msg -> log.debug("TCPHandler: message '{}' sent", msg))
+//                .subscribe();
 
         initiateRouterConnection();
     }
@@ -73,7 +76,6 @@ public class TcpController {
                 .host(host)
                 .port(port)
                 .doOnConnected(this::onConnected)
-                .handle(this::handle)
                 .connect()
                 .retryWhen(retrySpec())
                 .doOnError(e -> {
@@ -98,29 +100,54 @@ public class TcpController {
 
         routerInputProcessor = new FixMessageProcessor();
 
+        // redirect all router input to processor (message un-chunking)
         connection.inbound()
                 .receive()
                 .asString()
                 .doOnNext(routerInputProcessor::processInput)
                 .subscribe();
-        log.info("TCPHandler: All client input is redirected into processor.");
 
+        // complete messages - to be processed one-by one
         routerInputProcessor.getFlux()
                 .doOnNext(tradingService::handleMessageFromRouter)
                 .subscribe();
+
+        Flux<String> outputFlux = toRouterSink.asFlux()
+                .doOnNext(msg -> log.debug("TCPHandler: sending message {}", msg));
+
+        connection.outbound()
+                .sendString(outputFlux, StandardCharsets.UTF_8)
+                .then()
+                .subscribe();
+
+        connection.onDispose()
+                .doFinally(signalType -> {
+                    log.info("Peer disconnected, retrying...");
+                    this.connection = null;
+                }).subscribe();
+
         log.info("TCPHandler: Processor initialized and subscription established.");
     }
 
-    private Publisher<Void> handle(NettyInbound inbound, NettyOutbound outbound) {
-        return outbound.sendString(
-                toRouterSink.asFlux(), StandardCharsets.UTF_8
-        ).then().doOnError(e -> {
-            log.warn("TCPHandler: Failed to send message, retrying connection: {}",
-                    e.getMessage());
-            connection = null; // Reset connection and retry
-            initiateRouterConnection();
-        });
-    }
+//    private Publisher<String> sendMessage(String s) {
+//        if (Objects.nonNull(connection)) {
+//            return connection.outbound()
+//                    .sendString(Mono.just(s), StandardCharsets.UTF_8)
+//                    .then()
+//                    .onErrorResume()
+//        } else if (!connectionInProgress.get()) {
+//            log.info("TCPHandler: trading request not sent: Router service is unavailable.");
+//            try {
+//                FixResponse autogen = FixResponse.autoGenerateResponseOnFail(
+//                        request, FixResponse.SEND_FAILED
+//                );
+//                tradingService.handleMessageFromRouter(autogen.asFix());
+//            } catch (FixMessageMisconfiguredException e) {
+//                log.error("TCPHandler: Response autogeneration failed");
+//            }
+//            initiateRouterConnection();
+//        }
+//    }
 
     private Publisher<String> requestEventToStringPublisher(Object event) {
         if (event instanceof FixRequest request) {
@@ -139,7 +166,8 @@ public class TcpController {
                 initiateRouterConnection();
             }
         } else if (event instanceof FixStateUpdateRequest stateRequest) {
-            if (Objects.nonNull(connection)) {
+            if (Objects.nonNull(connection) &&
+                    !stateRequest.getTarget().equals("not assigned")) {
                 return publishStateRequestString(stateRequest);
             } else if (!connectionInProgress.get()) {
                 log.info("TCPHandler: State update request not sent: Router service is unavailable.");
@@ -154,7 +182,7 @@ public class TcpController {
     private Publisher<String> publishStateRequestString(FixStateUpdateRequest request) {
         try {
             String fix = request.asFix();
-            log.info("TCPHandler: sending message '{}'", fix);
+            log.info("TCPHandler: publishing state request message '{}'", fix);
             return Mono.just(fix);
         } catch (FixMessageMisconfiguredException e) {
             log.info("Trading request not sent: '{}'", e.getMessage());
@@ -166,7 +194,7 @@ public class TcpController {
         try {
             request.setSender(tradingService.getAssignedId());
             String fix = request.asFix();
-            log.info("TCPHandler: sending message '{}'", fix);
+            log.info("TCPHandler: publishing trade request message '{}'", fix);
             return Mono.just(fix);
         } catch (FixMessageMisconfiguredException e) {
             log.info("TCPHandler: Trading request not sent: '{}'", e.getMessage());
