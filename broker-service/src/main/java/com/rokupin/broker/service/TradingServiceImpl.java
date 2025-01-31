@@ -138,8 +138,9 @@ public class TradingServiceImpl implements TradingService {
 
     private String serializeCurrentState() {
         try {
-            return objectMapper.writeValueAsString(new StocksStateMessage(
-                    Map.copyOf(currentStockState)));
+            return objectMapper.writeValueAsString(
+                    new StocksStateMessage(
+                            Map.copyOf(currentStockState)));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Trading service: failed to serialize currentStockState");
         }

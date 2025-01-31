@@ -1,8 +1,6 @@
 package com.rokupin.broker.events;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationListener;
-import org.springframework.stereotype.Component;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.publisher.FluxSink;
 
@@ -17,7 +15,6 @@ import java.util.function.Consumer;
  * 3. Let WebSocketMessage publisher drain it gradually
  */
 @SuppressWarnings("rawtypes")
-@Component
 public class InputEventPublisher<E extends BrokerEvent> implements
         ApplicationListener<E>, Consumer<FluxSink<E>> {
 
@@ -34,7 +31,7 @@ public class InputEventPublisher<E extends BrokerEvent> implements
      */
     private final BlockingQueue<E> queue = new LinkedBlockingQueue<>();
 
-    public InputEventPublisher(@Qualifier("eventPublisherExecutor") Executor executor) {
+    public InputEventPublisher(Executor executor) {
         this.executor = executor;
     }
 

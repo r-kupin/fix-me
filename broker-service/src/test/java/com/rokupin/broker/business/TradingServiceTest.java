@@ -1,8 +1,9 @@
-package com.rokupin.broker.service;
+package com.rokupin.broker.business;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.model.StocksStateMessage;
+import com.rokupin.broker.service.TradingServiceImpl;
 import com.rokupin.model.fix.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

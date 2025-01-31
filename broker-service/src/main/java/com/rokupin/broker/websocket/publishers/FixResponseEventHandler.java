@@ -48,7 +48,7 @@ public class FixResponseEventHandler implements WebSocketSessionEventHandler {
     }
 
     private Publisher<String> fixToClientResponse(WebSocketSession session,
-                                             FixResponse fixResponse) {
+                                                  FixResponse fixResponse) {
         try {
             ClientTradingResponse response = new ClientTradingResponse(fixResponse);
             try {
