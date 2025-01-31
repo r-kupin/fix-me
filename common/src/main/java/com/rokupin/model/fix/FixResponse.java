@@ -146,7 +146,7 @@ public class FixResponse extends FixMessage {
             case ACTION_UNSUPPORTED -> "Action (side) should be either 1 or 2";
             case TOO_MUCH ->
                     "Target exchange limits it's amount of the instrument being sold.";
-            case SEND_FAILED -> "Target service can't be reached";
+            case SEND_FAILED -> "Target service can't be reached. Retry later.";
             default -> "Reason unknown";
         };
     }
