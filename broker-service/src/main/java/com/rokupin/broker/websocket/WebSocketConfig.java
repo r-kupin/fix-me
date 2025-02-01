@@ -1,6 +1,5 @@
 package com.rokupin.broker.websocket;
 
-import com.rokupin.broker.TcpController;
 import com.rokupin.broker.websocket.publishers.PublisherConfig;
 import com.rokupin.broker.websocket.publishers.WebSocketSessionEventHandler;
 import com.rokupin.broker.websocket.service.WebSocketHandlerService;
@@ -20,13 +19,6 @@ import java.util.Map;
 @Configuration
 @Import(PublisherConfig.class)
 public class WebSocketConfig {
-
-    private final TcpController tcpController;
-
-    public WebSocketConfig(TcpController tcpController) {
-        this.tcpController = tcpController;
-    }
-
     @Bean
     WebSocketHandlerService webSocketHandlerService(
             @Qualifier("clientInputHandler")
