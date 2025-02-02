@@ -1,87 +1,66 @@
-package com.rokupin.broker;
+package com.rokupin.broker.tcp.service;
 
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.service.TradingService;
+import com.rokupin.broker.tcp.ConnectivityProvider;
 import com.rokupin.model.fix.*;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.Connection;
-import reactor.netty.tcp.TcpClient;
-import reactor.util.retry.Retry;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.EventObject;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Slf4j
-//@Component
-public class TcpController {
-    private /*final*/ String host;
-    private /*final*/ int port;
-    private /*final*/ AtomicBoolean connectionInProgress;
-    private /*final*/ TradingService tradingService;
-    private /*final*/ Flux<BrokerEvent<FixMessage>> tradeRequestEventFlux;
-    private /*final*/ Sinks.Many<String> toRouterSink;
-    private Connection connection;
+public class TcpHandlerImpl implements TcpHandler, TcpConfigurer {
+    private final TradingService tradingService;
+    private final ConnectivityProvider connectivityProvider;
+    private final String host;
+    private final int port;
+
+    private final AtomicBoolean connectionInProgress;
+    private final Sinks.Many<String> toRouterSink;
+    private volatile Connection connection;
     private FixMessageProcessor routerInputProcessor;
 
+    public TcpHandlerImpl(String host, int port,
+                          Consumer<FluxSink<BrokerEvent<FixMessage>>> consumer,
+                          ConnectivityProvider connectivityProvider,
+                          TradingService tradingService
+    ) {
+        this.toRouterSink = Sinks.many().multicast().directAllOrNothing();
+        this.connectivityProvider = connectivityProvider;
+        this.tradingService = tradingService;
+        this.connectionInProgress = new AtomicBoolean(false);
+        this.host = host;
+        this.port = port;
 
-//    public TcpController(TradingService tradingService,
-//                         @Qualifier("tradeRequestEventPublisher") Consumer<FluxSink<BrokerEvent<FixMessage>>> tradeRequestEventPublisher,
-//                         @Value("${tcp.host}") String host,
-//                         @Value("${tcp.port}") int port) {
-//        this.host = host;
-//        this.port = port;
-//        this.tradingService = tradingService;
-//        this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
-//        this.connectionInProgress = new AtomicBoolean(false);
-//        this.toRouterSink = Sinks.many().multicast().directAllOrNothing();
-//    }
-
-    //    @PostConstruct
-    private void init() {
-        tradeRequestEventFlux.map(EventObject::getSource)
+        Flux.create(consumer)
+                .share()
+                .map(EventObject::getSource)
                 .flatMap(this::requestEventToStringPublisher)
                 .doOnNext(toRouterSink::tryEmitNext)
                 .subscribe();
-
-        initiateRouterConnection();
     }
 
-    private void initiateRouterConnection() {
+    @PostConstruct
+    public void startConnection() {
         if (Objects.isNull(connection) &&
                 connectionInProgress.compareAndSet(false, true)) {
-            connect();
+            connectivityProvider.connect(this, host, port);
         }
     }
 
-    private void connect() {
-        TcpClient.create()
-                .host(host)
-                .port(port)
-                .doOnConnected(this::onConnected)
-                .connect()
-                .retryWhen(retrySpec())
-                .doOnError(e -> {
-                    log.warn("TCPHandler: Connection failed: {}", e.getMessage());
-                    connection = null;
-                }).doOnSuccess(connection -> {
-                    connectionInProgress.set(false);
-                    this.connection = connection;
-                    log.info("TCPHandler: Connected successfully to {}:{}", host, port);
-                }).onErrorResume(e -> {
-                    log.error("TCPHandler: Connection attempts exhausted. Reporting failure.");
-                    connectionInProgress.set(false);
-                    return Mono.empty();
-                }).subscribe();
-    }
-
-    private void onConnected(Connection connection) {
+    @Override
+    public void configureConnection(Connection connection) {
         configureInputProcessing(connection);
         configureOutputProcessing(connection);
 
@@ -123,6 +102,25 @@ public class TcpController {
                 .subscribe();
     }
 
+    @Override
+    public void handleConnected(Connection connection) {
+        this.connection = connection;
+        connectionInProgress.set(false);
+        log.info("TCPHandler: Connected successfully to {}:{}", host, port);
+    }
+
+    @Override
+    public void handleNotConnected(Throwable e) {
+        connection = null;
+        log.warn("TCPHandler: Connection failed: {}", e.getMessage());
+    }
+
+    @Override
+    public void handleConnectionFailed(Throwable e) {
+        connectionInProgress.set(false);
+        log.error("TCPHandler: Connection can't be established right now");
+    }
+
     private Publisher<String> requestEventToStringPublisher(Object event) {
         if (event instanceof FixRequest request) {
             if (Objects.nonNull(connection)) {
@@ -138,7 +136,7 @@ public class TcpController {
                 } catch (FixMessageMisconfiguredException e) {
                     log.error("TCPHandler: Response autogeneration failed");
                 }
-                initiateRouterConnection();
+                startConnection();
             }
         } else if (event instanceof FixStateUpdateRequest stateRequest) {
             if (Objects.nonNull(connection) &&
@@ -146,7 +144,7 @@ public class TcpController {
                 return publishFixMessage(stateRequest);
             } else if (!connectionInProgress.get()) {
                 log.info("TCPHandler: State update request not sent: Router service is unavailable.");
-                initiateRouterConnection();
+                startConnection();
             }
         }
         return Mono.empty();
@@ -161,15 +159,5 @@ public class TcpController {
             log.info("TCPHandler: '{}'", e.getMessage());
         }
         return Mono.empty();
-    }
-
-    private Retry retrySpec() {
-        return Retry.backoff(5, Duration.ofSeconds(2))
-                .maxBackoff(Duration.ofSeconds(10))
-                .doBeforeRetry(signal -> log.info(
-                        "TCPHandler: retrying connection, attempt {}",
-                        signal.totalRetriesInARow() + 1)
-                ).onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
-                        new RuntimeException("TCPHandler: Max retry attempts reached."));
     }
 }
