@@ -1,8 +1,8 @@
 package com.rokupin.broker.session_handlers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rokupin.broker.publishers.ClientInputHandler;
 import com.rokupin.broker.service.TradingService;
-import com.rokupin.broker.websocket.publishers.ClientInputHandler;
 import com.rokupin.model.fix.ClientTradingRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

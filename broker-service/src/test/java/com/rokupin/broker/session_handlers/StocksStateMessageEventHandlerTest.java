@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.events.InputEventPublisher;
 import com.rokupin.broker.model.StocksStateMessage;
-import com.rokupin.broker.websocket.publishers.StocksStateMessageEventHandler;
+import com.rokupin.broker.publishers.StocksStateMessageEventHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

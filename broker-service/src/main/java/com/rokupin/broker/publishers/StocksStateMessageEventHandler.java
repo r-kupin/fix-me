@@ -1,4 +1,4 @@
-package com.rokupin.broker.websocket.publishers;
+package com.rokupin.broker.publishers;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

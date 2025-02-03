@@ -1,7 +1,7 @@
 package com.rokupin.broker.websocket;
 
-import com.rokupin.broker.websocket.publishers.PublisherConfig;
-import com.rokupin.broker.websocket.publishers.WebSocketSessionEventHandler;
+import com.rokupin.broker.publishers.PublisherConfig;
+import com.rokupin.broker.publishers.WebSocketSessionEventHandler;
 import com.rokupin.broker.websocket.service.WebSocketHandlerService;
 import com.rokupin.broker.websocket.service.WebSocketHandlerServiceImpl;
 import org.springframework.beans.factory.annotation.Qualifier;

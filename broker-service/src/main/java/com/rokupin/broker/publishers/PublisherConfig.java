@@ -1,11 +1,13 @@
-package com.rokupin.broker.websocket.publishers;
+package com.rokupin.broker.publishers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.broker.events.BrokerEvent;
 import com.rokupin.broker.events.EventConfig;
 import com.rokupin.broker.model.StocksStateMessage;
 import com.rokupin.broker.service.TradingService;
+import com.rokupin.model.fix.FixRequest;
 import com.rokupin.model.fix.FixResponse;
+import com.rokupin.model.fix.FixStateUpdateRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,5 +40,20 @@ public class PublisherConfig {
             Consumer<FluxSink<BrokerEvent<StocksStateMessage>>> stocksStateMessagePublisher
     ) {
         return new StocksStateMessageEventHandler(objectMapper, stocksStateMessagePublisher);
+    }
+
+    @Bean
+    TcpConnectionEventHandler fixRequestEventHandler(
+            Consumer<FluxSink<BrokerEvent<FixRequest>>> tradeRequestEventPublisher,
+            TradingService service
+    ) {
+        return new FixRequestEventHandler(service, tradeRequestEventPublisher);
+    }
+
+    @Bean
+    TcpConnectionEventHandler fixStateUpdateRequestEventHandler(
+            Consumer<FluxSink<BrokerEvent<FixStateUpdateRequest>>> stateUpdateRequestEventPublisher
+    ) {
+        return new FixStateUpdateRequestEventHandler(stateUpdateRequestEventPublisher);
     }
 }
