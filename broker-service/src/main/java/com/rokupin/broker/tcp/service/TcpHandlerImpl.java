@@ -86,7 +86,6 @@ public class TcpHandlerImpl implements TcpHandler, TcpConfigurer {
                 }).subscribe();
     }
 
-
     @Override
     public void handleConnected(Connection connection) {
         log.info("TCPHandler: Connected successfully to {}:{}", host, port);

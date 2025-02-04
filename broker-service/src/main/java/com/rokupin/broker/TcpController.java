@@ -6,6 +6,7 @@ import com.rokupin.model.fix.*;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.Connection;
@@ -17,6 +18,7 @@ import java.time.Duration;
 import java.util.EventObject;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Slf4j
 //@Component
@@ -31,17 +33,17 @@ public class TcpController {
     private FixMessageProcessor routerInputProcessor;
 
 
-//    public TcpController(TradingService tradingService,
-//                         @Qualifier("tradeRequestEventPublisher") Consumer<FluxSink<BrokerEvent<FixMessage>>> tradeRequestEventPublisher,
-//                         @Value("${tcp.host}") String host,
-//                         @Value("${tcp.port}") int port) {
-//        this.host = host;
-//        this.port = port;
-//        this.tradingService = tradingService;
-//        this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
-//        this.connectionInProgress = new AtomicBoolean(false);
-//        this.toRouterSink = Sinks.many().multicast().directAllOrNothing();
-//    }
+    public TcpController(TradingService tradingService,
+            /*@Qualifier("tradeRequestEventPublisher")*/ Consumer<FluxSink<BrokerEvent<FixMessage>>> tradeRequestEventPublisher,
+            /*@Value("${tcp.host}")*/ String host,
+            /*@Value("${tcp.port}")*/ int port) {
+        this.host = host;
+        this.port = port;
+        this.tradingService = tradingService;
+        this.tradeRequestEventFlux = Flux.create(tradeRequestEventPublisher).share();
+        this.connectionInProgress = new AtomicBoolean(false);
+        this.toRouterSink = Sinks.many().multicast().directAllOrNothing();
+    }
 
     //    @PostConstruct
     private void init() {

@@ -20,24 +20,25 @@ import java.util.function.Consumer;
 @Slf4j
 public class FixRequestEventHandler implements TcpConnectionEventHandler {
     private final TradingService tradingService;
-    private final Flux<Object> flux;
+    private final Sinks.Many<String> sink;
 
     public FixRequestEventHandler(
             TradingService tradingService,
             Consumer<FluxSink<BrokerEvent<FixRequest>>> eventPublisher
     ) {
         this.tradingService = tradingService;
-        this.flux = Flux.create(eventPublisher)
+        this.sink = Sinks.many().multicast().directAllOrNothing();
+
+        Flux.create(eventPublisher)
                 .share()
-                .map(EventObject::getSource);
+                .map(EventObject::getSource)
+                .flatMap(this::eventToString)
+                .doOnNext(sink::tryEmitNext)
+                .subscribe();
     }
 
     @Override
     public Mono<Void> handle(ConnectionWrapper connection) {
-        Sinks.Many<String> sink = Sinks.many()
-                .multicast()
-                .directAllOrNothing();
-
         connection.sendString(sink.asFlux())
                 .then()
                 .subscribe();
@@ -45,6 +46,18 @@ public class FixRequestEventHandler implements TcpConnectionEventHandler {
         return flux.flatMap(event -> handleEmission(event, connection))
                 .doOnNext(sink::tryEmitNext)
                 .then();
+    }
+
+    private Publisher<String> eventToString(Object event) {
+        if (event instanceof FixRequest request) {
+            try {
+                request.setSender(tradingService.getAssignedId());
+                return Mono.just(request.asFix());
+            } catch (FixMessageMisconfiguredException e) {
+                log.info("{}", e.getMessage());
+            }
+        }
+        return Mono.empty();
     }
 
     private Publisher<String> handleEmission(Object event, ConnectionWrapper connection) {
