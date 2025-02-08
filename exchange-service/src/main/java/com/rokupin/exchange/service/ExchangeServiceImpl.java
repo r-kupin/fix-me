@@ -4,18 +4,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rokupin.exchange.model.InstrumentEntry;
 import com.rokupin.exchange.repo.StockRepo;
-import com.rokupin.model.fix.*;
+import com.rokupin.model.fix.FixMessageMisconfiguredException;
+import com.rokupin.model.fix.FixRequest;
+import com.rokupin.model.fix.FixResponse;
+import com.rokupin.model.fix.FixStockStateReport;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
 import java.util.Objects;
 
 @Slf4j
-@Service
 @Transactional
 public class ExchangeServiceImpl implements ExchangeService  {
     private final int maxAmount;
@@ -23,8 +23,9 @@ public class ExchangeServiceImpl implements ExchangeService  {
     private final ObjectMapper objectMapper;
 
 
-    public ExchangeServiceImpl(StockRepo stockRepo, ObjectMapper objectMapper,
-                               @Value("${exchange.max-amount}") int maxAmount) {
+    public ExchangeServiceImpl(StockRepo stockRepo,
+                               ObjectMapper objectMapper,
+                               int maxAmount) {
         this.maxAmount = maxAmount;
         this.objectMapper = objectMapper;
         this.stockRepo = stockRepo;

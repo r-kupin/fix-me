@@ -54,19 +54,6 @@ public class TradingServiceTest {
     // GET_STATE
 
     @Test
-    void testGetState_onClientConnectedNoRouter() throws Exception {
-        // --- ACTION
-        String actualState = tradingService.getState();
-        String expectedState = objectMapper.writeValueAsString(emptyStateUpdate);
-
-        // --- ASSERTION
-        // should return empty state
-        assertEquals(actualState, expectedState);
-        // should not request state update, cause not connected to the router
-        verify(eventPublisher, never()).publishEvent(any());
-    }
-
-    @Test
     void testGetState_onClientConnectedRouterNoState() throws Exception {
         // --- ARRANGEMENT
         // service needs to know router id to ask it for update

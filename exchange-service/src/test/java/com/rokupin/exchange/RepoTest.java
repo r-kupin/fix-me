@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MariaDBContainer;
@@ -21,12 +22,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 @Testcontainers
 @DataR2dbcTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@MockBean(ExchangeConfig.class)
 public class RepoTest {
 
     @Container
-    static final MariaDBContainer<?> mariaDB = new MariaDBContainer<>("mariadb:latest")
-            .withCopyFileToContainer(MountableFile
-                    .forClasspathResource("testcontainers/create-schema.sql"), "/docker-entrypoint-initdb.d/init.sql");
+    static final MariaDBContainer<?> mariaDB =
+            new MariaDBContainer<>("mariadb:latest")
+                    .withCopyFileToContainer(
+                            MountableFile.forClasspathResource("testcontainers/create-schema.sql"),
+                            "/docker-entrypoint-initdb.d/init.sql"
+                    );
 
     @Autowired
     StockRepo stockRepo;

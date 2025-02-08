@@ -1,13 +1,11 @@
 package com.rokupin.model.fix;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
 import java.util.Objects;
 
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @Data
 public class FixResponse extends FixMessage {
@@ -149,5 +147,35 @@ public class FixResponse extends FixMessage {
             case SEND_FAILED -> "Target service can't be reached. Retry later.";
             default -> "Reason unknown";
         };
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof FixResponse that)) return false;
+
+        return action == that.action &&
+                amount == that.amount &&
+                ordStatus == that.ordStatus &&
+                rejectionReason == that.rejectionReason &&
+                Objects.equals(msgType, that.msgType) &&
+                Objects.equals(sender, that.sender) &&
+                Objects.equals(target, that.target) &&
+                Objects.equals(targetSubId, that.targetSubId) &&
+                Objects.equals(instrument, that.instrument);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hashCode(msgType);
+        result = 31 * result + Objects.hashCode(sender);
+        result = 31 * result + Objects.hashCode(target);
+        result = 31 * result + Objects.hashCode(targetSubId);
+        result = 31 * result + Objects.hashCode(instrument);
+        result = 31 * result + action;
+        result = 31 * result + amount;
+        result = 31 * result + ordStatus;
+        result = 31 * result + rejectionReason;
+        return result;
     }
 }

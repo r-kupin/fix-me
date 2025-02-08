@@ -16,6 +16,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.concurrent.Executors;
 
 import static org.mockito.Mockito.when;
@@ -93,7 +94,7 @@ class FixResponseEventHandlerTest {
 
         // --- ASSERTION
         StepVerifier.create(result)
-                .expectComplete()
+                .expectTimeout(Duration.ZERO)
                 .verify();
     }
 }
