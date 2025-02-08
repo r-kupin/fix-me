@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Slf4j
-public class TcpHandlerImpl implements TcpHandler, TcpConfigurer {
+public class TcpHandlerImpl implements TcpConfigurer {
     private final TradingService tradingService;
     private final ConnectivityProvider connectivityProvider;
     private final String host;
