@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Objects;
 
 @Slf4j
@@ -90,13 +91,28 @@ public class ExchangeServiceImpl implements ExchangeService  {
                     FixResponse.MSG_ORD_FILLED,
                     FixResponse.UNSPECIFIED
             );
+//            return stockRepo.findByName(request.getInstrument())
+//                    .flatMap(entry -> prepareResponse(entry, request, response))
+//                    .switchIfEmpty(Mono.defer(() -> {
+//                        response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
+//                        response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
+//                        return Mono.just(response);
+//                    }));
+            log.debug("processTradeRequest: Created initial response object: {}", response);
             return stockRepo.findByName(request.getInstrument())
+                    .timeout(Duration.ofSeconds(2))
+                    .doOnNext(entry -> log.debug("Stock found: {}", entry))
                     .flatMap(entry -> prepareResponse(entry, request, response))
                     .switchIfEmpty(Mono.defer(() -> {
                         response.setOrdStatus(FixResponse.MSG_ORD_REJECTED);
                         response.setRejectionReason(FixResponse.INSTRUMENT_NOT_SUPPORTED);
+                        log.warn("processTradeRequest: No instrument found, responding with rejection: {}", response);
                         return Mono.just(response);
-                    }));
+                    })).doOnNext(resp ->
+                            log.info("processTradeRequest: Response generated: {}", resp)
+                    ).doOnError(e ->
+                            log.error("processTradeRequest: Failed to process trade request", e)
+                    );
         } catch (FixMessageMisconfiguredException e) {
             log.error("Response creation failed: '{}'", e.getMessage());
             return Mono.empty();
@@ -106,6 +122,7 @@ public class ExchangeServiceImpl implements ExchangeService  {
     private Mono<FixResponse> prepareResponse(InstrumentEntry entry,
                                               FixRequest request,
                                               FixResponse response) {
+        log.debug("Preparing response");
         if (request.getAction() == FixRequest.SIDE_BUY) {
             if (entry.amount() >= request.getAmount()) {
                 return updateStockQuantity(entry,
@@ -137,6 +154,9 @@ public class ExchangeServiceImpl implements ExchangeService  {
         InstrumentEntry updatedEntry = new InstrumentEntry(
                 entry.id(), entry.name(), updatedAmount
         );
-        return stockRepo.save(updatedEntry);
+//        return stockRepo.save(updatedEntry);
+        return stockRepo.save(updatedEntry)
+                .doOnSuccess(e -> log.info("Stock updated: {} -> {}", entry.amount(), updatedAmount))
+                .doOnError(e -> log.error("Failed to update stock in DB", e));
     }
 }

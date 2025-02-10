@@ -80,6 +80,7 @@ public class TcpController {
             FixRequest request = FixMessage.fromFix(msg, new FixRequest());
             log.debug("Processing trading request");
             if (!Objects.isNull(assignedId)) {
+                log.debug("Calling prepareSendResponse for {}", request);
                 return prepareSendResponse(request);
             } else {
                 log.warn("Received trading request before ID was assigned");
@@ -100,6 +101,7 @@ public class TcpController {
         } catch (IllegalStateException e) {
             log.warn("Received message is not valid FIX request");
         }
+        log.warn("Returning empty");
         return Mono.empty();
     }
 
@@ -127,9 +129,15 @@ public class TcpController {
                         } else {
                             to_send = Mono.just(response.asFix());
                         }
+//                        return connection.outbound()
+//                                .sendString(to_send, StandardCharsets.UTF_8)
+//                                .then();
                         return connection.outbound()
                                 .sendString(to_send, StandardCharsets.UTF_8)
-                                .then();
+                                .then()
+                                .doOnSuccess(v -> log.info("Successfully sent response"))
+                                .doOnError(e -> log.error("Failed to send response over TCP: {}", e.getMessage()))
+                                .onErrorResume(e -> Mono.empty());
                     } catch (FixMessageMisconfiguredException e) {
                         log.error("Response assembly failed. This can't happen.");
                         return Mono.empty();
