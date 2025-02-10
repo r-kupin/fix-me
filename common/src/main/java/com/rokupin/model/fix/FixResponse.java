@@ -21,6 +21,7 @@ public class FixResponse extends FixMessage {
     public static final int ACTION_UNSUPPORTED = 5;
     public static final int TOO_MUCH = 6;
     public static final int SEND_FAILED = 7;
+    public static final int DB_TIMED_OUT = 8;
     private static final int TAG_EXEC_ID = 17;
     private static final int TAG_LAST_PX = 31;
     private static final int TAG_LAST_SHARES = 32;
@@ -122,9 +123,9 @@ public class FixResponse extends FixMessage {
                     "OrdStatus (39) should be 0 (New), 2 (Filled) or 8 (Rejected)." +
                             " Provided: '" + ordStatus + "'");
 
-        if (rejectionReason < 0 || rejectionReason > 7)
+        if (rejectionReason < 0 || rejectionReason > 8)
             throw new FixMessageMisconfiguredException(
-                    "OrdRejReason (103) should be >= 0 and <= 7 Provided: '" +
+                    "OrdRejReason (103) should be >= 0 and <= 8 Provided: '" +
                             rejectionReason + "'");
 
         if (!msgType.equals(MSG_EXECUTION_REPORT))
@@ -145,6 +146,8 @@ public class FixResponse extends FixMessage {
             case TOO_MUCH ->
                     "Target exchange limits it's amount of the instrument being sold.";
             case SEND_FAILED -> "Target service can't be reached. Retry later.";
+            case DB_TIMED_OUT ->
+                    "Due to high demand on server your order was not processed. You can retry now.";
             default -> "Reason unknown";
         };
     }
