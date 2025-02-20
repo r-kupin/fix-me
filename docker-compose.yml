@@ -1,14 +1,21 @@
 x-common-environment: &common-environment
+  DB_STOCK_NAME: ${DB_STOCK_NAME}
+  DB_STOCK_USERNAME: ${DB_STOCK_USERNAME}
+  DB_STOCK_PASSWORD: ${DB_STOCK_PASSWORD}
+  DB_CLIENT_NAME: ${DB_CLIENT_NAME}
+  DB_CLIENT_USERNAME: ${DB_CLIENT_USERNAME}
+  DB_CLIENT_PASSWORD: ${DB_CLIENT_PASSWORD}
+  DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD}
   DB_HOST: ${DB_HOST}
   DB_PORT: ${DB_PORT}
   EUREKA_HOST: ${EUREKA_HOST}
   EUREKA_PORT: ${EUREKA_PORT}
+  EUREKA_URI: ${EUREKA_URI}
   ROUTER_HOST: ${ROUTER_HOST}
   ROUTER_EXCHANGE_PORT: ${ROUTER_EXCHANGE_PORT}
   ROUTER_BROKER_PORT: ${ROUTER_BROKER_PORT}
+  CLIENT_PORT: ${CLIENT_PORT}
   GATEWAY_PORT: ${GATEWAY_PORT}
-  EUREKA_URI: ${EUREKA_URI}
-  DB_NAME: ${DB_NAME}
 
 services:
   mariadb:
@@ -16,10 +23,13 @@ services:
       context: mariadb
       dockerfile: Dockerfile
       args:
+        DB_STOCK_NAME: ${DB_STOCK_NAME}
+        DB_STOCK_USERNAME: ${DB_STOCK_USERNAME}
+        DB_STOCK_PASSWORD: ${DB_STOCK_PASSWORD}
+        DB_CLIENT_NAME: ${DB_CLIENT_NAME}
+        DB_CLIENT_USERNAME: ${DB_CLIENT_USERNAME}
+        DB_CLIENT_PASSWORD: ${DB_CLIENT_PASSWORD}
         DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD}
-        DB_USERNAME: ${DB_USERNAME}
-        DB_PASSWORD: ${DB_PASSWORD}
-        DB_NAME: ${DB_NAME}
     environment:
       <<: *common-environment
     ports:
@@ -74,14 +84,14 @@ services:
     build:
       context: broker-service
     environment:
-        <<: *common-environment
+      <<: *common-environment
     networks:
       - fix-me-network
     depends_on:
       router-service:
         condition: service_started
       eureka-server:
-          condition: service_healthy
+        condition: service_healthy
     deploy:
       replicas: 1
       update_config:
@@ -94,8 +104,8 @@ services:
     build:
       context: exchange-service
       args:
-        DB_USERNAME: ${DB_USERNAME}
-        DB_PASSWORD: ${DB_PASSWORD}
+        DB_STOCK_USERNAME: ${DB_STOCK_USERNAME}
+        DB_STOCK_PASSWORD: ${DB_STOCK_PASSWORD}
     environment:
       <<: *common-environment
     networks:

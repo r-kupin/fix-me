@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Signup</title></head>
+<body>
+<h2>Sign Up</h2>
+<form action="/signup" method="post" th:object="${userForm}">
+    <label>Username: <input required th:field="*{username}"
+                            type="text"/></label><br>
+    <label>Password: <input required th:field="*{password}"
+                            type="password"/></label><br>
+    <button type="submit">Sign Up</button>
+</form>
+<p>Already have an account? <a href="/login">Login</a></p>
+</body>
+</html>

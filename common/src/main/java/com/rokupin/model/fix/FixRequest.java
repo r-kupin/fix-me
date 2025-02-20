@@ -1,14 +1,12 @@
 package com.rokupin.model.fix;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;
 import java.util.Objects;
 
 
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @Data
 public class FixRequest extends FixMessage {

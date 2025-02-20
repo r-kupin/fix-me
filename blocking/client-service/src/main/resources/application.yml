@@ -1,0 +1,49 @@
+# Web server configuration
+server:
+  port: ${CLIENT_PORT:8888}
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+  address: ${CLIENT_LISTEN_ADDR:0.0.0.0}
+
+spring:
+  application:
+    name: client-service
+  # View resolver configuration
+  thymeleaf:
+    prefix: classpath:templates/
+    suffix: .html
+    mode: HTML
+    cache: false
+    check-template: false
+    reactive:
+      max-chunk-size: 8192
+  # Data source configuration
+  datasource:
+    driverClassName: org.mariadb.jdbc.Driver
+    url: jdbc:${DB_HOST:mariadb}://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_CLIENT_NAME:client_db}
+    username: ${DB_CLIENT_USERNAME:client_service}
+    password: ${DB_CLIENT_PASSWORD:client_pass}
+    hikari:
+      maximum-pool-size: 25
+  jpa:
+    generate-ddl: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 10
+          fetch_size: 30
+        max_fetch_depth: 3
+        show-sql: true
+        format-sql: false
+        use_sql_comments: false
+        hbm2ddl:
+          auto: none
+
+# Logging config
+logging:
+  level:
+    root: INFO
+    org.springframework.boot: INFO
+    com.rokupin: DEBUG

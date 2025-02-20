@@ -5,7 +5,7 @@
 
     <parent>
         <groupId>com.rokupin</groupId>
-        <artifactId>fix-me</artifactId>
+        <artifactId>reactive</artifactId>
         <version>1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath> <!-- Path to parent POM -->
     </parent>
@@ -14,5 +14,5 @@
         <skipRepackage>true</skipRepackage>
     </properties>
 
-    <artifactId>common</artifactId>
+    <artifactId>fix-processor</artifactId>
 </project>

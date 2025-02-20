@@ -1,9 +1,14 @@
 FROM alpine:latest
 
+ARG DB_STOCK_NAME
+ARG DB_STOCK_USERNAME
+ARG DB_STOCK_PASSWORD
+
+ARG DB_CLIENT_NAME
+ARG DB_CLIENT_USERNAME
+ARG DB_CLIENT_PASSWORD
+
 ARG DB_ADMIN_PASSWORD
-ARG DB_USERNAME
-ARG DB_PASSWORD
-ARG DB_NAME
 
 RUN apk update && apk add --no-cache mariadb mariadb-client
 
@@ -23,4 +28,4 @@ EXPOSE $DB_PORT
 
 USER mysql
 
-CMD ["/usr/bin/mysqld"]
+CMD ["/usr/bin/mariadbd"]
