@@ -14,7 +14,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <!--        <module>client-service</module>-->
+        <module>client-service</module>
         <module>eureka-server</module>
         <module>gateway-service</module>
     </modules>

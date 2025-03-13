@@ -19,8 +19,7 @@
     </properties>
 
     <dependencies>
-        <!-- Spring Security for Authentication (Optional) -->
-
+        <!-- Spring Security for Authentication -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
@@ -46,9 +45,24 @@
         <!-- JWT Auth -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt</artifactId>
-            <version>0.12.5</version>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+
 
         <!-- Spring Boot Starter Data for JPA and database interaction -->
         <dependency>
@@ -61,11 +75,11 @@
             <artifactId>mariadb-java-client</artifactId>
         </dependency>
 
-        <!--        <dependency>-->
-        <!--            <groupId>com.zaxxer</groupId>-->
-        <!--            <artifactId>HikariCP</artifactId>-->
-        <!--            <version>5.1.0</version>-->
-        <!--        </dependency>-->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.1.0</version>
+        </dependency>
 
         <!-- Testing -->
         <dependency>
@@ -82,6 +96,12 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Misc -->
         <dependency>
             <groupId>commons-io</groupId>
@@ -94,12 +114,6 @@
             <artifactId>jakarta.annotation-api</artifactId>
             <version>3.0.0</version>
         </dependency>
-
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -110,49 +124,49 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
-            <!-- Frontend Maven Plugin -->
-            <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>1.12.0</version>
-                <executions>
-                    <!-- Install Node & NPM -->
-                    <execution>
-                        <id>install-node-and-npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <configuration>
-                            <nodeVersion>${node.version}</nodeVersion>
-                            <npmVersion>${npm.version}</npmVersion>
-                        </configuration>
-                    </execution>
+            <!--            &lt;!&ndash; Frontend Maven Plugin &ndash;&gt;-->
+            <!--            <plugin>-->
+            <!--                <groupId>com.github.eirslett</groupId>-->
+            <!--                <artifactId>frontend-maven-plugin</artifactId>-->
+            <!--                <version>1.12.0</version>-->
+            <!--                <executions>-->
+            <!--                    &lt;!&ndash; Install Node & NPM &ndash;&gt;-->
+            <!--                    <execution>-->
+            <!--                        <id>install-node-and-npm</id>-->
+            <!--                        <goals>-->
+            <!--                            <goal>install-node-and-npm</goal>-->
+            <!--                        </goals>-->
+            <!--                        <configuration>-->
+            <!--                            <nodeVersion>${node.version}</nodeVersion>-->
+            <!--                            <npmVersion>${npm.version}</npmVersion>-->
+            <!--                        </configuration>-->
+            <!--                    </execution>-->
 
-                    <!-- Install Dependencies -->
-                    <execution>
-                        <id>npm-install</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>install</arguments>
-                            <workingDirectory>${frontend.dir}</workingDirectory>
-                        </configuration>
-                    </execution>
+            <!--                    &lt;!&ndash; Install Dependencies &ndash;&gt;-->
+            <!--                    <execution>-->
+            <!--                        <id>npm-install</id>-->
+            <!--                        <goals>-->
+            <!--                            <goal>npm</goal>-->
+            <!--                        </goals>-->
+            <!--                        <configuration>-->
+            <!--                            <arguments>install</arguments>-->
+            <!--                            <workingDirectory>${frontend.dir}</workingDirectory>-->
+            <!--                        </configuration>-->
+            <!--                    </execution>-->
 
-                    <!-- Build React App -->
-                    <execution>
-                        <id>npm-build</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>run build</arguments>
-                            <workingDirectory>${frontend.dir}</workingDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+            <!--                    &lt;!&ndash; Build React App &ndash;&gt;-->
+            <!--                    <execution>-->
+            <!--                        <id>npm-build</id>-->
+            <!--                        <goals>-->
+            <!--                            <goal>npm</goal>-->
+            <!--                        </goals>-->
+            <!--                        <configuration>-->
+            <!--                            <arguments>run build</arguments>-->
+            <!--                            <workingDirectory>${frontend.dir}</workingDirectory>-->
+            <!--                        </configuration>-->
+            <!--                    </execution>-->
+            <!--                </executions>-->
+            <!--            </plugin>-->
 
             <!-- Resource Copy Plugin (Move React Build to Static Folder) -->
             <plugin>

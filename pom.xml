@@ -7,6 +7,7 @@
     <artifactId>fix-me</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <description>FIX trading simulation platform</description>
 
     <modules>
         <module>blocking</module>
@@ -46,6 +47,13 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Spring Boot DevTools -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
         <!-- Spring Boot Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

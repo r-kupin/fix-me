@@ -33,12 +33,13 @@ if [ ! -d "/var/lib/mysql/${DB_STOCK_NAME}" ]; then
         values (2, 'TEST2', 2);
 
         USE ${DB_CLIENT_NAME};
-        CREATE TABLE user
+        CREATE TABLE users
         (
-            id        INT         NOT NULL AUTO_INCREMENT,
-            login     VARCHAR(60) NOT NULL,
-            password  VARCHAR(60) NOT NULL,
-            UNIQUE (login),
+            id            INT         NOT NULL AUTO_INCREMENT,
+            username      VARCHAR(60) NOT NULL,
+            password      VARCHAR(60) NOT NULL,
+            role          VARCHAR(60) NOT NULL,
+            UNIQUE (username),
             PRIMARY KEY (id)
         );
 EOSQL

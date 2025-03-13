@@ -45,7 +45,7 @@ services:
 
   eureka-server:
     build:
-      context: eureka-server
+      context: blocking/eureka-server
       dockerfile: Dockerfile
     container_name: eureka-server
     environment:
@@ -66,7 +66,7 @@ services:
 
   router-service:
     build:
-      context: router-service
+      context: reactive/router-service
     container_name: router-service
     environment:
       <<: *common-environment
@@ -82,7 +82,7 @@ services:
 
   broker-service:
     build:
-      context: broker-service
+      context: reactive/broker-service
     environment:
       <<: *common-environment
     networks:
@@ -102,7 +102,7 @@ services:
 
   exchange-service:
     build:
-      context: exchange-service
+      context: reactive/exchange-service
       args:
         DB_STOCK_USERNAME: ${DB_STOCK_USERNAME}
         DB_STOCK_PASSWORD: ${DB_STOCK_PASSWORD}
@@ -124,7 +124,7 @@ services:
 
   gateway-service:
     build:
-      context: gateway-service
+      context: blocking/gateway-service
     container_name: gateway-service
     environment:
       <<: *common-environment

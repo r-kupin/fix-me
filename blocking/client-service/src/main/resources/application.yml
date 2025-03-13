@@ -7,6 +7,11 @@ server:
     enabled: true
   address: ${CLIENT_LISTEN_ADDR:0.0.0.0}
 
+security:
+  keys:
+    public-key: classpath:keys/public.pem
+    private-key: classpath:keys/private.pem
+
 spring:
   application:
     name: client-service
