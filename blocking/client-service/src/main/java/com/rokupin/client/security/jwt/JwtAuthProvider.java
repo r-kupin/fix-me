@@ -1,7 +1,6 @@
-package com.rokupin.client.security;
+package com.rokupin.client.security.jwt;
 
 import com.rokupin.client.service.ClientDetailsService;
-import com.rokupin.client.service.JwtService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -19,7 +18,7 @@ import org.springframework.stereotype.Component;
 public class JwtAuthProvider implements AuthenticationProvider {
     private final ClientDetailsService clientDetailsService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final JwtUtils jwtUtils;
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
@@ -35,7 +34,7 @@ public class JwtAuthProvider implements AuthenticationProvider {
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        String token = jwtService.generateToken(userDetails);
+        String token = jwtUtils.generateToken(userDetails);
 
         log.debug("Token generated: {}", token);
 

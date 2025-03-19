@@ -1,7 +1,6 @@
-package com.rokupin.client.security;
+package com.rokupin.client.security.jwt;
 
 import com.rokupin.client.service.ClientDetailsService;
-import com.rokupin.client.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -26,7 +25,7 @@ import java.util.Objects;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final ClientDetailsService clientDetailsService;
-    private final JwtService jwtService;
+    private final JwtUtils jwtUtils;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -55,7 +54,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (Objects.nonNull(token)) {
             try {
-                username = jwtService.extractUsername(token);
+                username = jwtUtils.extractUsername(token);
             } catch (Exception e) {
                 log.warn("Invalid JWT Token: {}", e.getMessage());
             }
@@ -65,7 +64,7 @@ public class JwtFilter extends OncePerRequestFilter {
                 Objects.isNull(SecurityContextHolder.getContext().getAuthentication())) {
             UserDetails userDetails =
                     clientDetailsService.loadUserByUsername(username);
-            if (jwtService.validate(token, userDetails)) {
+            if (jwtUtils.validate(token, userDetails)) {
                 log.debug("User {} with token {} is validated", username, token);
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(

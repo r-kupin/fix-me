@@ -1,4 +1,4 @@
-package com.rokupin.client.security;
+package com.rokupin.client.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;

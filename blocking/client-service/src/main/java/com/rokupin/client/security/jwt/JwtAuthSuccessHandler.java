@@ -1,4 +1,4 @@
-package com.rokupin.client.security;
+package com.rokupin.client.security.jwt;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,7 +15,7 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-public class AuthSuccessHandler implements AuthenticationSuccessHandler {
+public class JwtAuthSuccessHandler implements AuthenticationSuccessHandler {
     private final RedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
 
     @Override

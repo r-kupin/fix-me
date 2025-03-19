@@ -1,4 +1,4 @@
-package com.rokupin.client.model.user;
+package com.rokupin.client.model.client;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;

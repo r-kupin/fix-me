@@ -2,6 +2,8 @@ package com.rokupin.client.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,8 +39,12 @@ public class AuthController {
 //    }
 
     @GetMapping("/home")
-    public String showHomePage(Model model) {
-        model.addAttribute("username", "gggggg");
+    public String showHomePage(
+            @AuthenticationPrincipal UserDetails userDetails,
+            Model model) {
+        if (userDetails != null) {
+            model.addAttribute("username", userDetails.getUsername());
+        }
         return "home";
     }
 }

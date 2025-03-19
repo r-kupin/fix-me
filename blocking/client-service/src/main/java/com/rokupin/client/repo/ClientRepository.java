@@ -1,6 +1,6 @@
 package com.rokupin.client.repo;
 
-import com.rokupin.client.model.user.Client;
+import com.rokupin.client.model.client.Client;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

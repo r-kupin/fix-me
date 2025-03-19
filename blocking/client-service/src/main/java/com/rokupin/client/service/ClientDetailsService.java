@@ -1,7 +1,7 @@
 package com.rokupin.client.service;
 
-import com.rokupin.client.model.user.Client;
-import com.rokupin.client.model.user.ClientDetails;
+import com.rokupin.client.model.client.Client;
+import com.rokupin.client.model.client.ClientDetails;
 import com.rokupin.client.repo.ClientRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
