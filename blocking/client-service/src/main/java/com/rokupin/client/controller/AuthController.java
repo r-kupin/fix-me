@@ -1,40 +1,21 @@
 package com.rokupin.client.controller;
 
-import com.rokupin.client.model.form.LoginForm;
-import com.rokupin.client.service.JwtService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
 
+@Slf4j
 @Controller
 @RequiredArgsConstructor
 public class AuthController {
     //    private final UserService userService;
-    private final JwtService jwtService;
+//    private final JwtService jwtService;
 
     @GetMapping("/login")
     public String showLoginPage() {
         return "login";
-    }
-
-    @PostMapping("/perform-login")
-    public String performLogin(@ModelAttribute LoginForm loginForm, Model model) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication instanceof UsernamePasswordAuthenticationToken tokenAuth) {
-            String jwt = tokenAuth.getCredentials().toString();
-            model.addAttribute("token", jwt);
-            return "redirect:/home";  // Redirect with token stored for frontend use
-        }
-
-        return "redirect:/login?login=failed";
     }
 
 //   @GetMapping("/signup")
@@ -56,9 +37,8 @@ public class AuthController {
 //    }
 
     @GetMapping("/home")
-    public String showHomePage(UserDetails user,
-                               Model model) {
-        model.addAttribute("username", user.getUsername());
+    public String showHomePage(Model model) {
+        model.addAttribute("username", "gggggg");
         return "home";
     }
 }

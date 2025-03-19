@@ -1,6 +1,7 @@
 package com.rokupin.client.service;
 
 import com.rokupin.client.model.user.Client;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -46,16 +47,38 @@ public class JwtService {
                 .compact();
     }
 
-    private Key getKey() {
+    private SecretKey getKey() {
         byte[] keyBytes = Decoders.BASE64.decode(keyStr);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String extractUsername(String token) {
-        return null;
+        try {
+            return Jwts.parser()
+                    .verifyWith(getKey()) // Validate the signature
+                    .build()
+                    .parseSignedClaims(token) // Parse JWT
+                    .getPayload()
+                    .getSubject(); // Extract subject (username)
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid JWT token", e);
+        }
     }
 
     public boolean validate(String token, UserDetails userDetails) {
-        return false;
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getKey()) // Validate signature
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+
+            String username = claims.getSubject();
+            Date expiration = claims.getExpiration();
+
+            return username.equals(userDetails.getUsername()) && expiration.after(new Date());
+        } catch (Exception e) {
+            return false; // Invalid token (expired or tampered)
+        }
     }
 }
